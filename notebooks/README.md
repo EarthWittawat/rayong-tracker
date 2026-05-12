@@ -62,12 +62,3 @@ A standalone refresh of the class-stats snapshot — without running any of the 
 python notebooks/export_class_stats.py
 ```
 
-## Editing the notebook
-
-Do not hand-edit `pipeline.ipynb`. Edit `_build_notebook.py` and re-emit:
-
-```bash
-python _build_notebook.py
-```
-
-The builder produces a deterministic notebook (fresh cell IDs each run) so diffs stay reviewable.
