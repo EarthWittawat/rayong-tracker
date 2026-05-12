@@ -772,6 +772,181 @@ The board's `tasks.done / tasks.total` field is intentionally generic — any mo
 """)
 
 # ============================================================================
+# 10 · Export class-distribution insights → public/class-stats.json
+# ============================================================================
+md("""## 10 · Export class-distribution insights to the web dashboard
+
+Writes `public/class-stats.json` consumed by the tracker site's *Class distribution* panel. The export computes per-area class shares + imbalance metrics from the **LDD landuse shapefile** so the team can spot underrepresented classes before training.
+
+Three breakdowns are produced:
+
+| Kind | Areas | Use |
+|---|---|---|
+| `overall` | the whole province | headline numbers |
+| `quadrant` | NW / NE / SW / SE (matches the tracker split) | see which quadrant is dominated by one crop |
+| `s2_tile` | Sentinel-2 100km MGRS tiles intersecting Rayong | pick training tiles per minority class |
+
+Metrics per area: **Shannon entropy** (higher = more balanced, max = log2 N), **Gini** (0 = balanced, 1 = one class), and **max/min ratio** of class areas.
+
+Re-run this cell whenever the shapefile changes; commit the JSON to deploy.
+""")
+
+code(r'''import json, math
+from collections import defaultdict
+from datetime import datetime, timezone
+
+# Constants mirror the web app's RayongMap (lib/rayong.ts).
+RAYONG_CENTER = {"lng": 101.4291, "lat": 12.8539}
+
+# Optional dependency for the per-S2-tile breakdown.
+try:
+    import mgrs as _mgrs_mod
+    _mgrs = _mgrs_mod.MGRS()
+except Exception:
+    _mgrs = None
+    print("note: `pip install mgrs` to enable the per-Sentinel-2-tile breakdown (skipping for now).")
+
+# Reproject to UTM 47N for accurate planar areas, lat/lng for centroid binning.
+lu_m  = lu.to_crs(32647).copy()
+lu_ll = lu.to_crs(4326).copy()
+lu_ll["area_km2"] = (lu_m.area / 1e6).values
+_cen_m = lu_m.geometry.centroid
+_cen_ll = _cen_m.to_crs(4326)
+lu_ll["_cen_lng"] = _cen_ll.x.values
+lu_ll["_cen_lat"] = _cen_ll.y.values
+
+def _quadrant(lng: float, lat: float) -> str:
+    east = lng >= RAYONG_CENTER["lng"]
+    north = lat >= RAYONG_CENTER["lat"]
+    return ("N" if north else "S") + ("E" if east else "W")
+
+def _s2_tile(lng: float, lat: float):
+    if _mgrs is None: return None
+    try:
+        s = _mgrs.toMGRS(lat, lng, MGRSPrecision=0)
+        return s[:5] if isinstance(s, str) and len(s) >= 5 else None
+    except Exception:
+        return None
+
+lu_ll["_quadrant"] = [_quadrant(x, y) for x, y in zip(lu_ll._cen_lng, lu_ll._cen_lat)]
+lu_ll["_s2_tile"]  = [_s2_tile (x, y) for x, y in zip(lu_ll._cen_lng, lu_ll._cen_lat)]
+
+# Class column (configurable — see CFG.ldd_landuse note).
+CLASS_COL = "LU_CODE" if "LU_CODE" in lu_ll.columns else lu_ll.columns[0]
+lu_ll[CLASS_COL] = lu_ll[CLASS_COL].astype(str).fillna("__unk__")
+
+# Build the kept class set: top-N by area + every minority class (pinned).
+TOP_N = 8
+total_by_class = lu_ll.groupby(CLASS_COL)["area_km2"].sum().sort_values(ascending=False)
+top_ids      = list(total_by_class.head(TOP_N).index)
+minority_ids = list(CFG.minority_classes)
+keep_ids     = list(dict.fromkeys(top_ids + minority_ids))  # de-dupe, preserve order
+
+lu_ll["_class"] = lu_ll[CLASS_COL].where(lu_ll[CLASS_COL].isin(keep_ids), other="other")
+
+# Deterministic palette. Minorities always flagged in a warning tone so they stand out in the bars.
+PALETTE = ["#3F7D58","#3F6E97","#C96442","#B68A2E","#7B5BA6","#9B5C7A","#4F7A95","#7C7A52","#A85C9D","#5F8A6E","#8B6F47","#D4A748"]
+MINORITY_COLOR = "#B14B3D"
+OTHER_COLOR    = "#9A968D"
+
+# Human-readable label override — extend this dict as you learn the LU_CODE meanings.
+LABELS = {
+    # "A101": "Paddy rice",
+    # "A203": "Cassava",
+    # "A302": "Sugar cane",
+    # "A401": "Pineapple",
+}
+
+ordered = keep_ids + (["other"] if "other" in lu_ll["_class"].unique() else [])
+class_defs = []
+for i, cid in enumerate(ordered):
+    is_min = cid in CFG.minority_classes
+    color  = MINORITY_COLOR if is_min else (OTHER_COLOR if cid == "other" else PALETTE[i % len(PALETTE)])
+    class_defs.append({
+        "id": cid,
+        "label": LABELS.get(cid, cid),
+        "color": color,
+        "minority": bool(is_min),
+    })
+
+def _area_block(df):
+    grp = df.groupby("_class")["area_km2"].sum().reindex(ordered, fill_value=0.0)
+    total = float(grp.sum())
+    classes = []
+    for cid in ordered:
+        a = float(grp.loc[cid])
+        classes.append({"id": cid, "area_km2": a, "share": (a / total) if total > 0 else 0.0})
+    classes.sort(key=lambda c: -c["share"])
+    return {"area_km2_total": total, "classes": classes}
+
+def _shannon(shares):
+    return -sum(s * math.log2(s) for s in shares if s > 0)
+
+def _gini(shares):
+    """Gini coefficient of a list of non-negative shares (already a distribution)."""
+    xs = sorted(float(s) for s in shares if s > 0)
+    n = len(xs)
+    if n == 0: return 0.0
+    cum = sum((i + 1) * s for i, s in enumerate(xs))
+    return (2 * cum) / (n * sum(xs)) - (n + 1) / n
+
+def _ratio(shares):
+    nz = [s for s in shares if s > 0]
+    return (max(nz) / min(nz)) if nz else 0.0
+
+def _metrics(block):
+    shares = [c["share"] for c in block["classes"]]
+    return {
+        "shannon": round(_shannon(shares), 4),
+        "gini":    round(_gini(shares), 4),
+        "max_min_ratio": round(_ratio(shares), 3),
+    }
+
+areas = []
+
+ov = _area_block(lu_ll)
+areas.append({"key": "overall", "label": "All Rayong", "kind": "overall", **ov, "metrics": _metrics(ov)})
+
+QUAD_LABELS = {"NW": "Northwest", "NE": "Northeast", "SW": "Southwest", "SE": "Southeast"}
+for q in ("NW", "NE", "SW", "SE"):
+    sub = lu_ll[lu_ll["_quadrant"] == q]
+    block = _area_block(sub)
+    areas.append({"key": q, "label": QUAD_LABELS[q], "kind": "quadrant", **block, "metrics": _metrics(block)})
+
+if _mgrs is not None:
+    for tile, sub in sorted(lu_ll.groupby("_s2_tile")):
+        if not tile: continue
+        block = _area_block(sub)
+        if block["area_km2_total"] < 1.0:  # skip sliver overlaps
+            continue
+        areas.append({"key": str(tile), "label": str(tile), "kind": "s2_tile", **block, "metrics": _metrics(block)})
+
+LU_SHP_NAME = LU_SHP.name if "LU_SHP" in globals() else "LDD landuse"
+payload = {
+    "version": 1,
+    "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "source": f"LDD landuse · {LU_SHP_NAME}",
+    "classes": class_defs,
+    "areas": areas,
+}
+
+# Write next to the web app (CFG.repo_root/public). If repo_root happens to
+# point elsewhere (a fresh CFG default), the relative path from the notebook
+# directory ../public will land in the right place.
+candidate_roots = [CFG.repo_root, Path.cwd().parent, Path.cwd()]
+out_path = None
+for root in candidate_roots:
+    if (root / "package.json").exists():
+        out_path = root / "public" / "class-stats.json"
+        break
+if out_path is None:
+    out_path = candidate_roots[0] / "public" / "class-stats.json"
+out_path.parent.mkdir(parents=True, exist_ok=True)
+out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+print(f"wrote {out_path}\\n  {len(class_defs)} classes · {len(areas)} areas (1 overall + 4 quadrant + {sum(1 for a in areas if a['kind']=='s2_tile')} S2 tiles)")
+''')
+
+# ============================================================================
 # emit
 # ============================================================================
 nb = {

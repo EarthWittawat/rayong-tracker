@@ -11,6 +11,7 @@ import { PresenceBar } from "@/components/PresenceBar";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { LoginGate } from "@/components/LoginGate";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ClassInsights } from "@/components/ClassInsights";
 import { computeProgress } from "@/lib/progress";
 import { isLive } from "@/lib/supabase";
 import type { Member } from "@/lib/supabase";
@@ -201,6 +202,8 @@ export default function Page() {
             <RayongMap members={members} tasks={tasks} focusId={focusId} onFocus={setFocusId} />
           </div>
         </section>
+
+        <ClassInsights />
 
         <section className="space-y-4">
           <div className="flex items-end justify-between gap-3 flex-wrap">
