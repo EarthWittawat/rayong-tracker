@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { MapContainer, TileLayer, Polygon, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet-draw";
@@ -218,13 +219,15 @@ export function MapClient({
   const bboxPy = bbox && `bbox = [${bbox.west.toFixed(6)}, ${bbox.south.toFixed(6)}, ${bbox.east.toFixed(6)}, ${bbox.north.toFixed(6)}]  # [west, south, east, north]`;
 
   const mapWrapClasses = fullscreen
-    ? "fixed inset-0 z-[1400] rounded-none border-0 bg-bg flex flex-col"
+    ? "fixed top-0 left-0 right-0 bottom-0 z-[1400] rounded-none border-0 bg-bg flex flex-col"
     : "relative rounded-lg overflow-hidden border border-border";
-  const mapHeightClass = fullscreen ? "flex-1" : "h-[460px]";
+  const mapWrapStyle: React.CSSProperties | undefined = fullscreen
+    ? { width: "100vw", height: "100vh", top: 0, left: 0 }
+    : undefined;
+  const mapHeightClass = fullscreen ? "flex-1 h-full" : "h-[460px]";
 
-  return (
-    <div className="space-y-3">
-      <div className={mapWrapClasses}>
+  const mapNode = (
+    <div className={mapWrapClasses} style={mapWrapStyle}>
         <MapContainer
           center={[RAYONG_CENTER.lat, RAYONG_CENTER.lng]}
           zoom={10}
@@ -364,6 +367,14 @@ export function MapClient({
           </div>
         )}
       </div>
+  );
+
+  return (
+    <div className="space-y-3">
+      {/* When fullscreen, portal the map wrap to <body> so no ancestor's
+          transform / filter / backdrop-filter can shrink the fixed container.
+          Otherwise render in place. */}
+      {fullscreen && typeof document !== "undefined" ? createPortal(mapNode, document.body) : mapNode}
 
       {/* control strip */}
       <div className="flex flex-wrap items-center gap-3 text-xs">
