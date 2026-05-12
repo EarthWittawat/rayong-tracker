@@ -17,6 +17,7 @@ import { ClassInsights } from "@/components/ClassInsights";
 import { BoardView } from "@/components/BoardView";
 import { MatrixView } from "@/components/MatrixView";
 import { CommandPalette } from "@/components/CommandPalette";
+import { IssuesNavLink } from "@/components/IssuesNavLink";
 import { exportTasksCsv, exportTasksJson } from "@/lib/exporters";
 import { PipelineGuide } from "@/components/PipelineGuide";
 import { computeProgress } from "@/lib/progress";
@@ -347,10 +348,7 @@ export default function Page() {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" /></svg>
             Insights
           </a>
-          <a href="/issues" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-surface text-ink font-medium hover:bg-surface2 transition-colors whitespace-nowrap">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="8" r="7" /><circle cx="8" cy="8" r="2.5" fill="currentColor" /></svg>
-            Issues
-          </a>
+          <IssuesNavLink />
         </div>
       </nav>
 
