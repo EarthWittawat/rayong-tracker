@@ -246,11 +246,11 @@ create policy "subtasks delete own"  on public.subtasks for delete using (auth.u
 -- ============================================================================
 
 -- Tear down the old email-allowlist machinery if it was created earlier.
-drop policy if exists "allowed read auth"        on public.allowed_users;
-drop policy if exists "allowed insert allowed"   on public.allowed_users;
-drop policy if exists "allowed delete allowed"   on public.allowed_users;
+-- `drop table ... cascade` removes any attached policies in one shot, so we
+-- don't need separate `drop policy` calls that would themselves fail with
+-- 42P01 when the table was never created on this project.
+drop table if exists public.allowed_users cascade;
 drop function if exists public.is_allowed();
-drop table if exists public.allowed_users;
 
 -- Roster of users who have access to the board. Only written via the
 -- redeem_invite RPC (SECURITY DEFINER) so an unprivileged client can't
