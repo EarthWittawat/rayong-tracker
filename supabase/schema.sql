@@ -39,6 +39,8 @@ drop policy if exists "open write members" on public.members;
 drop policy if exists "open read tasks"    on public.tasks;
 drop policy if exists "open write tasks"   on public.tasks;
 
+-- (Open policies replaced below by an email-allowlist gate. See the
+-- 'allowed_users + is_allowed()' section near the end of this file.)
 create policy "open read members"  on public.members for select using (true);
 create policy "open write members" on public.members for all    using (true) with check (true);
 create policy "open read tasks"    on public.tasks   for select using (true);
@@ -234,6 +236,81 @@ create policy "subtasks read all"    on public.subtasks for select using (true);
 create policy "subtasks insert auth" on public.subtasks for insert with check (auth.uid() = author_id);
 create policy "subtasks update auth" on public.subtasks for update using (auth.uid() is not null) with check (auth.uid() is not null);
 create policy "subtasks delete own"  on public.subtasks for delete using (auth.uid() = author_id);
+
+-- ============================================================================
+-- ===== access control =====
+-- Email allowlist + RLS gate. Only addresses in `public.allowed_users` can
+-- read or write the board state. Anyone with a Google account can still
+-- sign in (Supabase Auth doesn't change), but they hit the access-gate
+-- screen until an existing member adds their email here.
+-- ============================================================================
+
+create table if not exists public.allowed_users (
+  email     text primary key,
+  added_by  uuid references public.profiles(id) on delete set null,
+  added_at  timestamptz not null default now(),
+  note      text
+);
+
+alter table public.allowed_users enable row level security;
+
+-- Helper used by every gated policy below. SECURITY DEFINER so the policy
+-- recursion stays bounded (the function itself doesn't re-trigger the
+-- allowed_users RLS check while running its query).
+create or replace function public.is_allowed() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1
+    from public.allowed_users a
+    where lower(a.email) = lower(coalesce(auth.email(), ''))
+  );
+$$;
+grant execute on function public.is_allowed() to anon, authenticated;
+
+drop policy if exists "allowed read auth"      on public.allowed_users;
+drop policy if exists "allowed insert allowed" on public.allowed_users;
+drop policy if exists "allowed delete allowed" on public.allowed_users;
+
+-- Any signed-in user can see the allowlist (so the access-gate UI can hint
+-- 'you are member #N'). Only existing members can add or revoke.
+create policy "allowed read auth"      on public.allowed_users for select using (auth.uid() is not null);
+create policy "allowed insert allowed" on public.allowed_users for insert with check (public.is_allowed());
+create policy "allowed delete allowed" on public.allowed_users for delete using (public.is_allowed());
+
+-- ----- replace the open policies on the data tables -------------------------
+drop policy if exists "open read members"  on public.members;
+drop policy if exists "open write members" on public.members;
+drop policy if exists "open read tasks"    on public.tasks;
+drop policy if exists "open write tasks"   on public.tasks;
+drop policy if exists "profiles read all"  on public.profiles;
+drop policy if exists "comments read all"  on public.comments;
+drop policy if exists "subtasks read all"  on public.subtasks;
+drop policy if exists "attachments read all" on public.attachments;
+drop policy if exists "subs read all"      on public.task_subscribers;
+
+create policy "members read allowed"  on public.members for select using (public.is_allowed());
+create policy "members write allowed" on public.members for all
+  using (public.is_allowed()) with check (public.is_allowed());
+
+create policy "tasks read allowed"  on public.tasks for select using (public.is_allowed());
+create policy "tasks write allowed" on public.tasks for all
+  using (public.is_allowed()) with check (public.is_allowed());
+
+-- Profile self-row stays readable so first-time sign-in can ensureProfile.
+create policy "profiles read allowed" on public.profiles
+  for select using (auth.uid() = id or public.is_allowed());
+
+create policy "comments read allowed"    on public.comments    for select using (public.is_allowed());
+create policy "subtasks read allowed"    on public.subtasks    for select using (public.is_allowed());
+create policy "attachments read allowed" on public.attachments for select using (public.is_allowed());
+create policy "subs read allowed"        on public.task_subscribers for select using (public.is_allowed());
+
+-- Bootstrap your own email so the allowlist isn't a dead lock. Run this
+-- ONCE in the SQL editor (or edit and re-run the migration) — replace
+-- 'YOUR_EMAIL_HERE' with the address you'll sign in with.
+--
+--   insert into public.allowed_users (email) values ('YOUR_EMAIL_HERE')
+--   on conflict (email) do nothing;
 
 -- ===== realtime publication =====
 -- `alter publication add table` has no IF NOT EXISTS, so wrap each addition

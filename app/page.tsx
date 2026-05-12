@@ -10,6 +10,8 @@ import { IdentityModal } from "@/components/IdentityModal";
 import { PresenceBar } from "@/components/PresenceBar";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { LoginGate } from "@/components/LoginGate";
+import { AccessGate } from "@/components/AccessGate";
+import { AccessModal } from "@/components/AccessModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ClassInsights } from "@/components/ClassInsights";
 import { BoardView } from "@/components/BoardView";
@@ -39,6 +41,7 @@ export default function Page() {
   const [sortMode, setSortMode] = useState<SortMode>("default");
   const [undo, setUndo] = useState<{ name: string; restore: () => Promise<void> } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showAccess, setShowAccess] = useState(false);
 
   // member-grid filters / view
   const [query, setQuery] = useState("");
@@ -188,10 +191,14 @@ export default function Page() {
     return <LoginGate configured={supaConfigured} onSignIn={session.signInWithGoogle} />;
   }
 
-  if (!session.profile) {
+  if (session.allowed === false) {
+    return <AccessGate email={session.user.email ?? "(unknown email)"} onSignOut={session.signOut} />;
+  }
+
+  if (!session.profile || session.allowed === null) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted">
-        <span className="text-sm">setting up your profile…</span>
+        <span className="text-sm">{session.allowed === null ? "checking access…" : "setting up your profile…"}</span>
       </div>
     );
   }
@@ -273,6 +280,10 @@ export default function Page() {
                     onClick={() => { setShowIdentity(true); setMenuOpen(false); }}
                     className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink"
                   >Edit profile</button>
+                  <button
+                    onClick={() => { setShowAccess(true); setMenuOpen(false); }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink"
+                  >Manage access</button>
                   <button
                     onClick={handleAdd}
                     className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink md:hidden"
@@ -623,6 +634,12 @@ export default function Page() {
           await session.updateProfile(patch);
           setShowIdentity(false);
         }}
+      />
+
+      <AccessModal
+        open={showAccess}
+        onClose={() => setShowAccess(false)}
+        currentEmail={profile.email}
       />
     </main>
   );

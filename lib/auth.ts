@@ -46,6 +46,12 @@ export type SessionState = {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  /**
+   * True when the signed-in email is present in public.allowed_users.
+   * Null means the check hasn't completed yet; false means signed in but
+   * not on the allowlist → render the access-pending gate.
+   */
+  allowed: boolean | null;
 };
 
 export type AuthActions = {
@@ -55,8 +61,27 @@ export type AuthActions = {
 };
 
 export function useSession(): SessionState & AuthActions & { needsProfileSetup: boolean } {
-  const [state, setState] = useState<SessionState>({ loading: true, session: null, user: null, profile: null });
+  const [state, setState] = useState<SessionState>({ loading: true, session: null, user: null, profile: null, allowed: null });
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
+
+  const checkAllowed = useCallback(async (email: string | null | undefined): Promise<boolean> => {
+    const sb = getSupabase();
+    if (!sb || !email) return false;
+    try {
+      const { count, error } = await sb
+        .from("allowed_users")
+        .select("email", { count: "exact", head: true })
+        .ilike("email", email);
+      if (error) {
+        console.warn("allowed_users check error:", error.message);
+        return false;
+      }
+      return (count ?? 0) > 0;
+    } catch (e) {
+      console.warn("allowed_users check threw:", e);
+      return false;
+    }
+  }, []);
 
   const fetchProfile = useCallback(async (user: User): Promise<Profile | null> => {
     const sb = getSupabase();
@@ -97,7 +122,7 @@ export function useSession(): SessionState & AuthActions & { needsProfileSetup: 
   useEffect(() => {
     const sb = getSupabase();
     if (!sb || !isLive()) {
-      setState({ loading: false, session: null, user: null, profile: null });
+      setState({ loading: false, session: null, user: null, profile: null, allowed: null });
       return;
     }
 
@@ -105,10 +130,6 @@ export function useSession(): SessionState & AuthActions & { needsProfileSetup: 
 
     async function load(session: Session | null) {
       if (cancelled) return;
-      // Realtime channels need the authenticated JWT so other users can
-      // see each other's presence + broadcast events when Realtime
-      // authorization (RLS-on-realtime) is enabled on the project.
-      // Without this, presence stays self-only and "I cannot see my friend".
       try {
         if (session?.access_token) {
           sb!.realtime.setAuth(session.access_token);
@@ -120,13 +141,15 @@ export function useSession(): SessionState & AuthActions & { needsProfileSetup: 
       }
 
       if (!session?.user) {
-        setState({ loading: false, session: null, user: null, profile: null });
+        setState({ loading: false, session: null, user: null, profile: null, allowed: null });
         setNeedsProfileSetup(false);
         return;
       }
       const { profile, isNew } = await ensureProfile(session.user);
       if (cancelled) return;
-      setState({ loading: false, session, user: session.user, profile });
+      const allowed = await checkAllowed(session.user.email);
+      if (cancelled) return;
+      setState({ loading: false, session, user: session.user, profile, allowed });
       setNeedsProfileSetup(isNew);
     }
 
@@ -140,7 +163,7 @@ export function useSession(): SessionState & AuthActions & { needsProfileSetup: 
       cancelled = true;
       sub.subscription.unsubscribe();
     };
-  }, [ensureProfile]);
+  }, [ensureProfile, checkAllowed]);
 
   const signInWithGoogle = useCallback(async () => {
     const sb = getSupabase();
