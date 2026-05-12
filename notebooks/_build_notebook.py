@@ -53,6 +53,21 @@ All cells are designed to run end-to-end on a single Rayong AOI (defaults to a 1
 # ============================================================================
 # 1 · Setup
 # ============================================================================
+md("""### Kernel-restart cheatsheet
+
+If the kernel dies (DLL errors, OOM, etc.) you do **not** need to re-run the heavy fetch / SR / training cells — every expensive step writes to `CFG.cache_root` and short-circuits on the next call. After restarting:
+
+1. Run §1 to define `CFG`, imports, and the SR singleton.
+2. Run §2 to rehydrate `S2_DIR` + `S2` from disk (no CDSE round-trip if the cache exists).
+3. Run §3 to rehydrate `SR` (per-month TIFFs cached under `CFG.cache_root/s2_sr/<aoi>`).
+4. Run §6 to reload the LDD landuse `gpd` GeoDataFrame.
+5. Jump straight to the section you were working on.
+
+To force a refetch, pass `force=True` to the relevant helper (e.g. `fetch_s2_monthly_median(CFG, force=True)`).
+
+---
+""")
+
 md("""## 1 · Setup
 
 **Recommended:** create the conda env from `notebooks/environment.yml` (see `notebooks/README.md`) — that bundles the GDAL chain through conda-forge and avoids most Windows install pain.
@@ -193,13 +208,25 @@ except Exception as e:
 print("connected:", CONN.capabilities().get("title", "CDSE openEO"))
 ''')
 
-code(r'''def fetch_s2_monthly_median(cfg: Config) -> Path:
-    """Build cloud-masked monthly-median S2 datacube for AOI, save per-month GeoTIFFs.
-
-    Returns the directory containing the TIFFs.
-    """
+code(r'''def s2_cache_dir(cfg: Config) -> Path:
+    """Deterministic location for the monthly-median S2 tiffs. Survives kernel restarts."""
     out_dir = cfg.cache_root / "s2_monthly" / cfg.aoi_name
     out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
+
+def fetch_s2_monthly_median(cfg: Config, force: bool = False) -> Path:
+    """Build a cloud-masked monthly-median S2 datacube for the AOI, save per-month GeoTIFFs.
+
+    Idempotent: if the cache directory already has *.tif files and `force` is False,
+    we skip the openEO batch job and just return the cached directory. Re-running
+    this cell after a kernel restart costs ~0s instead of re-queueing on CDSE.
+    """
+    out_dir = s2_cache_dir(cfg)
+    cached = sorted(out_dir.glob("*.tif"))
+    if cached and not force:
+        print(f"cache hit · {len(cached)} files in {out_dir}")
+        print("set force=True to refetch from CDSE")
+        return out_dir
 
     bbox_kw = dict(west=cfg.aoi_bbox[0], south=cfg.aoi_bbox[1],
                    east=cfg.aoi_bbox[2], north=cfg.aoi_bbox[3], crs="EPSG:4326")
@@ -234,7 +261,9 @@ code(r'''def fetch_s2_monthly_median(cfg: Config) -> Path:
     job.get_results().download_files(str(out_dir))
     return out_dir
 
-# Trigger the fetch. First run ~10–20 min depending on AOI size + queue.
+# Trigger the fetch. First run ~10–20 min depending on AOI size + queue;
+# every subsequent run (even after a kernel restart) is instant because of
+# the cache short-circuit above.
 S2_DIR = fetch_s2_monthly_median(CFG)
 print("S2 tiffs in:", S2_DIR)
 print("files:", sorted(p.name for p in S2_DIR.glob("*.tif"))[:6], "...")
@@ -256,6 +285,9 @@ def load_s2_stack(s2_dir: Path) -> xr.DataArray:
     print("S2 stack:", stack.shape, "dims:", stack.dims, "crs:", stack.rio.crs)
     return stack
 
+# If you restart the kernel, you can re-hydrate `S2` without re-running the
+# fetch cell — just `S2_DIR = s2_cache_dir(CFG)` then `S2 = load_s2_stack(S2_DIR)`.
+S2_DIR = s2_cache_dir(CFG)
 S2 = load_s2_stack(S2_DIR)
 ''')
 
