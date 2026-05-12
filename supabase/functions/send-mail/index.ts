@@ -320,6 +320,10 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
 }
 
 function json(obj: Record<string, unknown>, status = 200): Response {
+  // Mirror the body into stdout so it lands in Logs Explorer alongside
+  // the request metadata. Saves a round-trip through browser DevTools
+  // when diagnosing sent=0.
+  try { console.log("[send-mail] response", JSON.stringify(obj)); } catch {}
   return new Response(JSON.stringify(obj), {
     status,
     headers: { "Content-Type": "application/json", ...CORS_HEADERS },
