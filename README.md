@@ -76,6 +76,8 @@ task_subscribers, notifications  : digest mailer plumbing
 
 Edits are **optimistic** locally (UI updates immediately) and **debounced** at 220 ms before hitting Postgres. All tables above (except the mailer plumbing) are on the `supabase_realtime` publication, so every browser sees every change over a single WebSocket.
 
+Tables filtered by a non-primary-key column on the client (`comments.task_id`, `attachments.comment_id`, `subtasks.task_id`, `issue_comments.issue_id`, `issues.status` / `issues.number`) need `REPLICA IDENTITY FULL` so `UPDATE` / `DELETE` events carry the filtered column. Otherwise the filter on the subscriber side can't match and the event is silently dropped — UI shows stale state until refresh. Apply `supabase/migrations/20260513140000_realtime_full_identity.sql` once to enable.
+
 Self-removal is blocked at the UI layer (the "remove member" control turns into a small "you" lock chip on your own row) and in the handler (defensive early return), so the signed-in user's row can never be dropped accidentally.
 
 ---

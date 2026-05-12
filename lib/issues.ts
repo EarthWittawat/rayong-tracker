@@ -53,6 +53,10 @@ export function labelColor(name: string): string {
 }
 
 // ────────────────────────── list ──────────────────────────
+// Realtime requirement: tables filtered on non-PK columns
+// (issues by status / number, issue_comments by issue_id) need
+// REPLICA IDENTITY FULL so UPDATE / DELETE events carry the filtered
+// columns. See supabase/migrations/20260513140000_realtime_full_identity.sql.
 
 export function useIssueList(filter: IssueStatus | "all" = "open") {
   const [items, setItems] = useState<Issue[]>([]);
