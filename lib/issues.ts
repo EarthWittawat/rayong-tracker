@@ -74,7 +74,7 @@ export function useIssueList(filter: IssueStatus | "all" = "open") {
       setItems((data as Issue[]) ?? []);
       setLoading(false);
     })();
-    const ch = sb.channel("issues-list")
+    const ch = sb.channel(`issues-list-${Math.random().toString(36).slice(2, 8)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "issues" },
         (payload) => {
           if (payload.eventType === "DELETE") {
@@ -113,7 +113,7 @@ export function useIssueCounts() {
       if (alive) setCounts({ open: o ?? 0, closed: c ?? 0 });
     }
     refresh();
-    const ch = sb.channel("issues-counts")
+    const ch = sb.channel(`issues-counts-${Math.random().toString(36).slice(2, 8)}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "issues" }, () => { refresh(); })
       .subscribe();
     return () => { alive = false; sb.removeChannel(ch); };
@@ -321,7 +321,12 @@ export function useIssueIndex(): IssueLite[] {
       setItems((data as IssueLite[]) ?? []);
     }
     refresh();
-    const ch = sb.channel("issues-index")
+    // Unique channel name per mount. Multiple CommentThread instances on
+    // the Work page each call this hook; a shared channel name causes the
+    // second mount's subscribe() to no-op and removeChannel on the first
+    // unmount tears down the realtime feed for everyone else.
+    const id = `issues-index-${Math.random().toString(36).slice(2, 8)}`;
+    const ch = sb.channel(id)
       .on("postgres_changes", { event: "*", schema: "public", table: "issues" }, () => { refresh(); })
       .subscribe();
     return () => { alive = false; sb.removeChannel(ch); };
