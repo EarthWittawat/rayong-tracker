@@ -1,69 +1,73 @@
-# Notebooks
+# `notebooks/` — SynthCrop pipeline
 
-End-to-end pipeline that mirrors the five tracker stages (`Data · SR · GenAI · Feat · RF`).
+`pipeline.ipynb` is the end-to-end research notebook backing the **SynthCrop Progress Tracker** (the web app under `app/`). It implements a five-stage Sentinel-2 → super-resolution → generative augmentation → feature engineering → Random Forest workflow for crop-type classification.
 
-## `pipeline.ipynb`
+## Stages
 
-Section map:
+| § | Stage  | Topic                                                                                |
+| - | ------ | ------------------------------------------------------------------------------------ |
+| 1 | —      | imports, `Config` dataclass, quadrant-AOI resolution, GPU check                      |
+| 2 | Data   | CDSE openEO · Sentinel-2 L2A monthly median with SCL cloud masking                   |
+| 3 | SR     | OpenSR latent diffusion ×4 (10 m → 2.5 m) on B02 / B03 / B04 / B08                   |
+| 4 | GenAI  | minority-class synthesis · 4a LoRA-fine-tuned SEN2SR · 4b DiffusionSat               |
+| 5 | —      | full-AOI + zoom + monthly strip + per-band reflectance histograms                    |
+| 6 | Feat   | LDD landuse → rasterise on SR grid → per-class patch extraction                      |
+| 7 | Feat   | pixel table: temporal band stats + NDVI / NDWI / EVI + GLCM / LBP texture            |
+| 8 | RF     | stage-1 Random Forest + minority-focused cascade · classification report + figures   |
+| 9 | —      | mapping notebook outputs back to tracker-board `done / total` counts                 |
+| 10| —      | export `public/class-stats.json` for the website's Class Distribution panel          |
 
-| § | Tracker stage | Topic |
-|---|---|---|
-| 1 | — | setup, config dataclass, GPU check |
-| 2 | `Data` | CDSE openEO → S2 L2A monthly median, SCL cloud mask |
-| 3 | `SR` | OpenSR / SEN2SR-LDM 4× super-resolution (10 m → 2.5 m) |
-| 4 | `GenAI` | minority-class generation: 4a LoRA-adapted SEN2SR, 4b DiffusionSat, 4c comparison + FID |
-| 5 | — | side-by-side viz (native vs SR) |
-| 6 | `Feat` | LDD landuse → rasterise on SR grid → per-class patch extraction |
-| 7 | `Feat` | pixel table: temporal stats + NDVI/NDWI/EVI + GLCM/LBP texture |
-| 8 | `RF` | stage-1 RF + cascade for minority classes; confusion matrix, importance |
-| 9 | — | mapping notebook outputs → tracker board task counts |
+GPU recommended for §3 and §4a. CPU-only is fine for §6–§8.
 
-## Conda environment
+## Environment
 
-`environment.yml` pins a clean conda-forge + pip stack (geospatial GDAL chain through conda-forge, PyTorch + diffusion stack through pip). Create + activate:
+`environment.yml` pins a conda-forge + pip stack: geospatial GDAL chain through conda-forge, PyTorch + diffusion stack through pip with a `+cu121` local-version tag so the resolver picks the CUDA wheel.
 
 ```bash
-# from this directory
 conda env create -f environment.yml
-conda activate rayong-tracker
+conda activate synthcrop
 
-# (optional) register the kernel so Jupyter shows it
-python -m ipykernel install --user --name rayong-tracker --display-name "Python (rayong-tracker)"
+# register the kernel so Jupyter shows it
+python -m ipykernel install --user --name synthcrop --display-name "Python (synthcrop)"
 ```
 
-If your GPU driver is CUDA 11.8 (or you have no GPU), edit the pip block before running `env create`:
-
-- CUDA 11.8 → swap `cu121` for `cu118`
-- CPU only  → swap `cu121` for `cpu`
-
-To refresh after editing `environment.yml`:
+Refresh after editing the env file:
 
 ```bash
 conda env update -f environment.yml --prune
 ```
 
-DiffusionSat is not on PyPI — clone it once into `../external/DiffusionSat` if you want §4b:
+DiffusionSat is not on PyPI — clone once if you intend to run §4b:
 
 ```bash
 git clone https://github.com/samar-khanna/DiffusionSat.git ../external/DiffusionSat
 ```
 
-## Running it
+## Data
 
-1. Activate the env: `conda activate rayong-tracker`.
-2. Launch: `jupyter lab pipeline.ipynb` (or VS Code / nbclassic).
-3. Authenticate with CDSE on first use (browser-based OIDC, cached afterwards).
-4. Adjust `CFG.aoi_bbox`, `CFG.minority_classes`, and the LDD paths if your shapefile column isn't `LU_CODE`.
-5. After §6 has loaded `lu` + `LU_SHP`, run §10 to export `public/class-stats.json` for the website's *Class distribution* panel — then commit the JSON.
+All shapefiles, caches, and outputs live under `<repo>/data/` — see `data/README.md` for the expected layout. The notebook resolves every path from `CFG.repo_root` so you don't need to touch absolute paths on a fresh laptop.
 
-GPU required for §3, §4. CPU works for §6–§8 only.
+## Running
 
-## Editing
+1. `conda activate synthcrop`
+2. `jupyter lab pipeline.ipynb`
+3. First run authenticates with CDSE via browser-based OIDC; the token is cached afterwards.
+4. Set `CFG.aoi_quadrant` (`FULL` / `NW` / `NE` / `SW` / `SE`) for your assigned area, or `CUSTOM` + paste a drawn bbox from the website's map readout panel into `CFG.aoi_bbox`.
+5. Heavy stages (Data, SR, RF) cache to `data/_cache/` and `data/_out/` — re-running after a kernel restart is fast.
+6. Run §10 once `lu` is loaded to refresh `public/class-stats.json`, then commit the JSON to update the website's Class Distribution panel.
 
-Don't hand-edit `pipeline.ipynb`. Edit `_build_notebook.py` and re-run:
+A standalone refresh of the class-stats snapshot — without running any of the heavy stages — is available via:
+
+```bash
+python notebooks/export_class_stats.py
+```
+
+## Editing the notebook
+
+Do not hand-edit `pipeline.ipynb`. Edit `_build_notebook.py` and re-emit:
 
 ```bash
 python _build_notebook.py
 ```
 
-This emits a deterministic notebook (sorted, fresh cell IDs each run).
+The builder produces a deterministic notebook (fresh cell IDs each run) so diffs stay reviewable.

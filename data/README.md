@@ -32,7 +32,7 @@ Copy-Item "D:/work/GIS/rf/preprocess/full_dataset/Landuse_ryg/ระยอง256
 The shapefile + cache + outputs are all gitignored. Each teammate keeps their own copy locally. To refresh the website's `public/class-stats.json` after editing the shapefile, re-run:
 
 ```powershell
-conda run -n rayong-tracker python notebooks/export_class_stats.py --shp data/landuse_ryg
+conda run -n synthcrop python notebooks/export_class_stats.py --shp data/landuse_ryg
 ```
 
 …then `git add public/class-stats.json` and commit.

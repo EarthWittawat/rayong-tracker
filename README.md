@@ -113,11 +113,11 @@ Notebook env:
 ```bash
 cd notebooks
 conda env create -f environment.yml
-conda activate rayong-tracker
-python -m ipykernel install --user --name rayong-tracker --display-name "Python (rayong-tracker)"
+conda activate synthcrop
+python -m ipykernel install --user --name synthcrop --display-name "Python (synthcrop)"
 ```
 
-Pinned: Python 3.12 (opensr-model requirement), `numpy<2`, `torch==2.3.1+cu121`, `transformers<4.47` (matches the torch 2.3 envelope). Swap `cu121` → `cu118` or `cpu` in `environment.yml` if your driver differs.
+Pinned: Python 3.12 (opensr-model requirement), `numpy<2`, `torch==2.3.1+cu121`, `transformers<4.47` (matches the torch 2.3 envelope).
 
 ---
 
