@@ -51,9 +51,12 @@ dependencies:
       - opensr-test
       - sen2sr
       - omegaconf       # used to load the opensr-model 10 m config
-      - diffusers
-      - transformers
-      - accelerate
+      # transformers 4.47+ requires torch>=2.4. We pin torch to 2.3.1+cu121 to
+      # dodge the fbgemm.dll WinError 127 issue, so cap transformers + diffusers
+      # at versions that still support torch 2.3.
+      - "diffusers<0.32"
+      - "transformers<4.47"
+      - "accelerate<1.2"
       - peft
       - safetensors
 
