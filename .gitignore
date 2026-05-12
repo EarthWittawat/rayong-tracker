@@ -7,3 +7,19 @@ out
 .DS_Store
 *.tsbuildinfo
 next-env.d.ts
+
+# notebook / conda junk
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+notebooks/anaconda_projects/
+notebooks/external/
+notebooks/_cache/
+notebooks/cache/
+*.ckpt
+*.joblib
+
+# Supabase CLI scratch
+supabase/.temp/
+
+# local Claude settings
+.claude/settings.local.json

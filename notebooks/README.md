@@ -18,12 +18,43 @@ Section map:
 | 8 | `RF` | stage-1 RF + cascade for minority classes; confusion matrix, importance |
 | 9 | — | mapping notebook outputs → tracker board task counts |
 
+## Conda environment
+
+`environment.yml` pins a clean conda-forge + pip stack (geospatial GDAL chain through conda-forge, PyTorch + diffusion stack through pip). Create + activate:
+
+```bash
+# from this directory
+conda env create -f environment.yml
+conda activate rayong-tracker
+
+# (optional) register the kernel so Jupyter shows it
+python -m ipykernel install --user --name rayong-tracker --display-name "Python (rayong-tracker)"
+```
+
+If your GPU driver is CUDA 11.8 (or you have no GPU), edit the pip block before running `env create`:
+
+- CUDA 11.8 → swap `cu121` for `cu118`
+- CPU only  → swap `cu121` for `cpu`
+
+To refresh after editing `environment.yml`:
+
+```bash
+conda env update -f environment.yml --prune
+```
+
+DiffusionSat is not on PyPI — clone it once into `../external/DiffusionSat` if you want §4b:
+
+```bash
+git clone https://github.com/samar-khanna/DiffusionSat.git ../external/DiffusionSat
+```
+
 ## Running it
 
-1. Install heavy deps (first cell, commented out by default — uncomment + run once).
-2. Authenticate with CDSE on first use (browser-based OIDC, cached afterwards).
-3. Clone DiffusionSat into `../external/DiffusionSat` if you want §4b.
+1. Activate the env: `conda activate rayong-tracker`.
+2. Launch: `jupyter lab pipeline.ipynb` (or VS Code / nbclassic).
+3. Authenticate with CDSE on first use (browser-based OIDC, cached afterwards).
 4. Adjust `CFG.aoi_bbox`, `CFG.minority_classes`, and the LDD paths if your shapefile column isn't `LU_CODE`.
+5. After §6 has loaded `lu` + `LU_SHP`, run §10 to export `public/class-stats.json` for the website's *Class distribution* panel — then commit the JSON.
 
 GPU required for §3, §4. CPU works for §6–§8 only.
 
