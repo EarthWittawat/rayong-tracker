@@ -41,8 +41,8 @@ export function BoardView({
   onFocusMember: (id: string) => void;
 }) {
   return (
-    <div className="-mx-6 px-6 overflow-x-auto pb-3 snap-x snap-mandatory lg:snap-none">
-      <div className="flex gap-3 min-w-max lg:min-w-0 lg:grid lg:grid-cols-5">
+    <div className="-mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 overflow-x-auto pb-3 snap-x snap-mandatory lg:snap-none">
+      <div className="flex gap-4 min-w-max">
         {STAGES.map(s => {
           const colTasks = members
             .map(({ m }) => ({
@@ -66,7 +66,7 @@ export function BoardView({
           return (
             <div
               key={s.key}
-              className="snap-start w-[19rem] shrink-0 lg:w-auto rounded-xl border border-border bg-surface2/30 flex flex-col"
+              className="snap-start w-[22rem] shrink-0 rounded-xl border border-border bg-surface2/30 flex flex-col"
             >
               <div className="px-3 pt-3 pb-2 border-b border-border">
                 <div className="flex items-center justify-between">

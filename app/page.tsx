@@ -209,7 +209,7 @@ export default function Page() {
   return (
     <main className="min-h-screen">
       <header className="nasa-nav sticky top-0 z-[1100]">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
           <div className="min-w-0 flex items-center gap-3">
             <div
               className="relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ring-2 ring-white/85"
@@ -290,7 +290,7 @@ export default function Page() {
         <div className="h-[3px] w-full bg-[rgb(var(--c-accent))]" />
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
         <OverviewStrip members={members} tasks={tasks} />
 
@@ -457,7 +457,7 @@ export default function Page() {
           )}
 
           {filteredMembers.length > 0 && view === "list" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5">
               {filteredMembers.map(({ m }) => (
                 <div id={`member-${m.id}`} key={m.id} className="scroll-mt-24">
                   <MemberCard
@@ -486,7 +486,7 @@ export default function Page() {
 
       <footer className="nasa-nav mt-12">
         <div className="h-[3px] w-full bg-[rgb(var(--c-accent))]" />
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
             <div>
               <div className="eyebrow text-[10px] nav-muted">Team telemetry</div>
