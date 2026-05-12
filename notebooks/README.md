@@ -70,14 +70,21 @@ DSAT pins `diffusers==0.18.2` / `huggingface_hub==0.16.4`, which conflicts with 
 conda env create -f environment-diffusionsat.yml
 conda activate synthcrop-dsat
 
+# register the kernel so JupyterLab can see it
+python -m ipykernel install --user --name synthcrop-dsat --display-name "Python (synthcrop-dsat)"
+
 # one-time: clone the DSAT repo next to this folder
 git clone https://github.com/samar-khanna/DiffusionSat.git external/DiffusionSat
-
-# sample synthetic patches per minority class into cache/synth/<class>/
-python diffusionsat_synth.py --classes Durian Langsat Rambutan --n 200
 ```
 
-The script writes `.npy` + RGB `.png` files in the same layout the base-SR sampler uses, so §6.1 in `pipeline.ipynb` picks them up automatically on the next render.
+Then you have two ways to sample, both producing the same `.npy + .png` layout under `data/_cache/synth/<class>/`:
+
+| How                     | When to use                                                              |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `diffusionsat.ipynb`    | Default. Open in JupyterLab, pick the `Python (synthcrop-dsat)` kernel, run top-to-bottom. Inline preview at the end. |
+| `diffusionsat_synth.py` | Batch / headless / scripted runs. Same logic, CLI args.                  |
+
+After either run, switch back to the `Python (synthcrop)` kernel in `pipeline.ipynb` and re-run §6.1 — it picks up the DSAT outputs automatically.
 
 ## Data
 
