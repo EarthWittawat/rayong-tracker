@@ -9,7 +9,7 @@ import {
 } from "@/lib/issues";
 import { LabelChip } from "./LabelChip";
 import { MentionInput } from "./MentionInput";
-import { parseMentions, renderMentionsHTML } from "@/lib/mentions";
+import { renderRichHTML } from "@/lib/mentions";
 import { formatRelative } from "@/lib/relativeTime";
 import type { Profile } from "@/lib/auth";
 
@@ -225,7 +225,7 @@ export function IssueDetail({
               value={draft}
               onChange={setDraft}
               profiles={profiles}
-              placeholder="Write a comment. Use @ to mention. Ctrl/⌘+Enter to send."
+              placeholder="Write a comment. Use @ to mention, #123 to link an issue. Ctrl/⌘+Enter to send."
               onSubmit={submitComment}
               rows={3}
             />
@@ -302,7 +302,7 @@ function CommentBlock({
   editable?: boolean;
   onEdit?: () => void;
 }) {
-  const html = useMemo(() => renderMentionsHTML(body, parseMentions(body, profiles)), [body, profiles]);
+  const html = useMemo(() => renderRichHTML(body, profiles), [body, profiles]);
   return (
     <div className="rounded-xl2 border border-border bg-surface">
       <div className="px-4 py-2 flex items-center justify-between gap-2 border-b border-border bg-surface2/40">
@@ -364,7 +364,7 @@ function IssueCommentBlock({
     );
   }
 
-  const html = renderMentionsHTML(comment.body, parseMentions(comment.body, profiles));
+  const html = renderRichHTML(comment.body, profiles);
   return (
     <div className="rounded-xl2 border border-border bg-surface">
       <div className="px-4 py-2 flex items-center justify-between gap-2 border-b border-border bg-surface2/40">

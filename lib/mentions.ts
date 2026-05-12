@@ -71,6 +71,68 @@ function escapeHtml(s: string): string {
   } as Record<string, string>)[c]);
 }
 
+// ─────────────────────────────────────────────────────────────
+// Issue references: GitHub-style `#NNN` autolinks.
+// Match when '#' sits at start of body or after whitespace / punctuation,
+// so things like "id#123" inside a URL don't trigger.
+// ─────────────────────────────────────────────────────────────
+
+export type IssueRef = {
+  number: number;
+  start: number;   // index of '#'
+  end: number;     // index after last digit
+};
+
+const ISSUE_RE = /(^|[^A-Za-z0-9_])#(\d{1,9})\b/g;
+
+export function parseIssueRefs(body: string): IssueRef[] {
+  if (!body) return [];
+  const out: IssueRef[] = [];
+  let m: RegExpExecArray | null;
+  ISSUE_RE.lastIndex = 0;
+  while ((m = ISSUE_RE.exec(body)) !== null) {
+    const num = parseInt(m[2], 10);
+    if (!Number.isFinite(num) || num <= 0) continue;
+    const start = m.index + (m[1]?.length ?? 0);
+    out.push({ number: num, start, end: start + 1 + m[2].length });
+  }
+  return out;
+}
+
+type Tok =
+  | { kind: "mention"; start: number; end: number; data: MentionMatch }
+  | { kind: "issue";   start: number; end: number; data: IssueRef };
+
+// Combined renderer: mentions + #NNN issue refs.
+// Skip overlapping tokens (last writer wins on conflict — unlikely in practice).
+export function renderRichHTML(body: string, profiles: Profile[]): string {
+  if (!body) return "";
+  const mentions = parseMentions(body, profiles);
+  const refs     = parseIssueRefs(body);
+  if (mentions.length === 0 && refs.length === 0) return escapeHtml(body);
+
+  const tokens: Tok[] = [
+    ...mentions.map(m => ({ kind: "mention" as const, start: m.start, end: m.end, data: m })),
+    ...refs.map(r => ({ kind: "issue"   as const, start: r.start, end: r.end, data: r })),
+  ].sort((a, b) => a.start - b.start);
+
+  const parts: string[] = [];
+  let cursor = 0;
+  for (const t of tokens) {
+    if (t.start < cursor) continue;            // overlap — drop later token
+    if (t.start > cursor) parts.push(escapeHtml(body.slice(cursor, t.start)));
+    if (t.kind === "mention") {
+      parts.push(`<span class="mention" data-uid="${t.data.id}">@${escapeHtml(t.data.name)}</span>`);
+    } else {
+      const n = t.data.number;
+      parts.push(`<a class="issue-ref" href="/issues/${n}" data-issue="${n}">#${n}</a>`);
+    }
+    cursor = t.end;
+  }
+  if (cursor < body.length) parts.push(escapeHtml(body.slice(cursor)));
+  return parts.join("");
+}
+
 // Find suggestions while user is typing. Returns the active token (the
 // substring after the last "@" before cursor) plus matching profiles.
 export function mentionTrigger(text: string, cursor: number, profiles: Profile[]): {

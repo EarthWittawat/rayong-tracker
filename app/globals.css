@@ -109,6 +109,19 @@ input[type="number"] { -moz-appearance: textfield; }
   font-weight: 500;
 }
 
+/* #NNN issue autolink — matches the @mention chip but uses accent2 (the
+   bright blue side of the palette) so it stays distinct from @mentions. */
+.issue-ref {
+  background: rgb(var(--c-accent2) / 0.12);
+  color: rgb(var(--c-accent2));
+  border-radius: 4px;
+  padding: 0 4px;
+  font-weight: 500;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.issue-ref:hover { text-decoration: underline; }
+
 /* ====== navigation slab ====== */
 .nasa-nav {
   background: linear-gradient(180deg, rgb(var(--c-nav-bg)) 0%, rgb(var(--c-nav-bg2)) 100%);

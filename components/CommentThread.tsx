@@ -5,7 +5,7 @@ import { useTaskComments, type CommentRow } from "@/lib/comments";
 import { MentionInput } from "./MentionInput";
 import { AttachmentChip } from "./AttachmentPreview";
 import { uploadAttachment, MAX_FILE_BYTES, humanSize, removeAttachment } from "@/lib/storage";
-import { parseMentions, renderMentionsHTML } from "@/lib/mentions";
+import { parseMentions, renderRichHTML } from "@/lib/mentions";
 import type { Profile } from "@/lib/auth";
 
 function relTime(iso: string): string {
@@ -279,6 +279,6 @@ export function CommentThread({
 }
 
 function renderCommentBody(c: CommentRow, profiles: Profile[]): string {
-  const mentions = parseMentions(c.body, profiles);
-  return renderMentionsHTML(c.body, mentions);
+  // Autolinks @mentions + #NNN issue refs in one pass.
+  return renderRichHTML(c.body, profiles);
 }

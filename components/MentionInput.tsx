@@ -84,7 +84,7 @@ export function MentionInput({
         onKeyDown={onKey}
         onClick={recomputeHint}
         onKeyUp={recomputeHint}
-        placeholder={placeholder ?? "Write a comment… use @ to mention"}
+        placeholder={placeholder ?? "Write a comment… @user to mention · #123 to link an issue"}
         autoFocus={autoFocus}
         rows={rows}
         disabled={disabled}
