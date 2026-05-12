@@ -30,6 +30,18 @@ function ClickHandler({ onClick }: { onClick: (lat: number, lng: number) => void
   return null;
 }
 
+function InvalidateOnResize({ trigger }: { trigger: unknown }) {
+  const map = useMap();
+  useEffect(() => {
+    // Leaflet only redraws when its container resizes if explicitly told.
+    // Run a couple of times to cover the CSS transition.
+    const a = setTimeout(() => map.invalidateSize(), 50);
+    const b = setTimeout(() => map.invalidateSize(), 250);
+    return () => { clearTimeout(a); clearTimeout(b); };
+  }, [trigger, map]);
+  return null;
+}
+
 type Bbox = { south: number; west: number; north: number; east: number };
 
 function DrawControl({ onBbox }: { onBbox: (b: Bbox | null) => void }) {
@@ -115,8 +127,24 @@ export function MapClient({
   const [click, setClick] = useState<{ lat: number; lng: number } | null>(null);
   const [bbox, setBbox] = useState<Bbox | null>(null);
   const [showS2, setShowS2] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Lock body scroll + escape-to-exit while fullscreen.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setFullscreen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [fullscreen]);
 
   // S2 (Sentinel-2) 100km MGRS tile prefix grid: scan bbox at coarse step, derive unique tile labels and centers.
   const s2Tiles = useMemo(() => {
@@ -189,18 +217,24 @@ export function MapClient({
 
   const bboxPy = bbox && `bbox = [${bbox.west.toFixed(6)}, ${bbox.south.toFixed(6)}, ${bbox.east.toFixed(6)}, ${bbox.north.toFixed(6)}]  # [west, south, east, north]`;
 
+  const mapWrapClasses = fullscreen
+    ? "fixed inset-0 z-[1400] rounded-none border-0 bg-bg flex flex-col"
+    : "relative rounded-lg overflow-hidden border border-border";
+  const mapHeightClass = fullscreen ? "flex-1" : "h-[460px]";
+
   return (
     <div className="space-y-3">
-      <div className="relative rounded-lg overflow-hidden border border-border">
+      <div className={mapWrapClasses}>
         <MapContainer
           center={[RAYONG_CENTER.lat, RAYONG_CENTER.lng]}
           zoom={10}
           minZoom={7}
           maxZoom={18}
           scrollWheelZoom
-          className="h-[460px] w-full"
+          className={`${mapHeightClass} w-full`}
           style={{ background: "rgb(var(--c-surface2))" }}
         >
+          <InvalidateOnResize trigger={fullscreen} />
           <TileLayer url={ESRI_IMAGERY} attribution={ESRI_ATTRIB} maxZoom={19} />
 
           <Polygon
@@ -270,8 +304,63 @@ export function MapClient({
         </MapContainer>
 
         {copyMsg && (
-          <div className="absolute top-3 right-3 z-[401] bg-ink text-bg text-xs px-3 py-1.5 rounded-md shadow-cardHover">
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[401] bg-ink text-bg text-xs px-3 py-1.5 rounded-md shadow-cardHover">
             {copyMsg}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setFullscreen(v => !v)}
+          aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title={fullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
+          className="absolute top-3 right-3 z-[401] inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-border bg-surface/95 backdrop-blur text-ink hover:bg-surface2 shadow-card"
+        >
+          {fullscreen ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3" /></svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" /></svg>
+          )}
+          <span className="text-[11px] font-medium">{fullscreen ? "Exit" : "Fullscreen"}</span>
+        </button>
+
+        {/* compact readout floating bottom-left while fullscreen so the user
+            can still see click + bbox coords without leaving the map */}
+        {fullscreen && (click || bbox) && (
+          <div className="absolute bottom-4 left-4 z-[401] max-w-md w-[min(28rem,calc(100vw-32px))] rounded-lg border border-border bg-surface/95 backdrop-blur p-3 space-y-2 shadow-cardHover text-xs">
+            {click && (
+              <div className="flex items-center gap-2">
+                <span className="eyebrow text-[9px] text-muted2 w-14 shrink-0">point</span>
+                <code className="flex-1 min-w-0 truncate text-ink bg-surface2 px-1.5 py-0.5 rounded">
+                  {click.lat.toFixed(5)}, {click.lng.toFixed(5)} · {clickTile ?? "—"}
+                </code>
+                <button onClick={() => copy(`${click.lat.toFixed(6)}, ${click.lng.toFixed(6)}`, "lat,lng")} className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted hover:text-ink">copy</button>
+                <button onClick={() => setClick(null)} aria-label="clear" className="text-muted2 hover:text-crit">×</button>
+              </div>
+            )}
+            {bbox && (
+              <div className="flex items-center gap-2">
+                <span className="eyebrow text-[9px] text-muted2 w-14 shrink-0">bbox</span>
+                <code className="flex-1 min-w-0 truncate text-ink bg-surface2 px-1.5 py-0.5 rounded">
+                  {bbox.west.toFixed(4)}, {bbox.south.toFixed(4)}, {bbox.east.toFixed(4)}, {bbox.north.toFixed(4)}
+                </code>
+                <button onClick={() => bboxPy && copy(bboxPy, "py bbox")} className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted hover:text-ink">py</button>
+                <button onClick={() => bboxGeojson && copy(bboxGeojson, "GeoJSON")} className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted hover:text-ink">geojson</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {fullscreen && (
+          <div className="absolute bottom-4 right-4 z-[401] flex items-center gap-2">
+            <button
+              onClick={() => setShowS2(v => !v)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs transition-colors ${showS2 ? "bg-accent text-bg border-accent" : "bg-surface/95 border-border text-ink hover:bg-surface2"}`}
+            >
+              <span className={`w-2 h-2 rounded-full ${showS2 ? "bg-bg" : "bg-warn"}`} />
+              S2 tiles
+            </button>
+            <span className="text-[10px] eyebrow px-2 py-1 rounded-md bg-surface/85 border border-border text-muted">Esc to exit</span>
           </div>
         )}
       </div>
