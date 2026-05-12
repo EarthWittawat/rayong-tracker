@@ -142,6 +142,9 @@ function renderIssueEmail(opts: {
 // ──────────────────────── handlers ────────────────────────
 
 async function handleTaskComment(commentId: string): Promise<Response> {
+  if (!RESEND_API_KEY) {
+    console.warn("[send-mail] RESEND_API_KEY not set — emails will NOT send. Run `supabase secrets set RESEND_API_KEY=...`");
+  }
   const { data: comment, error: cErr } = await admin
     .from("comments")
     .select("id, task_id, author_id, body, mentions, created_at")
@@ -175,6 +178,7 @@ async function handleTaskComment(commentId: string): Promise<Response> {
 
   let sent = 0;
   let queued = 0;
+  const breakdown: Array<{ user_id: string; status: string; detail?: string }> = [];
   for (const p of profiles ?? []) {
     const isMention = (comment.mentions ?? []).includes(p.id);
     const kind = isMention ? "mention" : "reply";
@@ -189,7 +193,8 @@ async function handleTaskComment(commentId: string): Promise<Response> {
     queued++;
 
     const wants = (isMention && p.notify_mentions) || (!isMention && p.notify_replies);
-    if (!wants || !p.email) continue;
+    if (!wants) { breakdown.push({ user_id: p.id, status: "skip", detail: `notify_${kind === "mention" ? "mentions" : "replies"}=false` }); continue; }
+    if (!p.email) { breakdown.push({ user_id: p.id, status: "skip", detail: "no email" }); continue; }
 
     const { subject, html } = renderTaskEmail({
       recipientName: p.name,
@@ -202,20 +207,25 @@ async function handleTaskComment(commentId: string): Promise<Response> {
     const r = await sendResendMail(p.email, subject, html);
     if (r.ok) {
       sent++;
+      breakdown.push({ user_id: p.id, status: "sent" });
       await admin
         .from("notifications")
         .update({ emailed_at: new Date().toISOString() })
         .eq("user_id", p.id)
         .eq("comment_id", comment.id);
     } else {
-      console.warn("mail failed for", p.email, r.error);
+      breakdown.push({ user_id: p.id, status: "resend_error", detail: r.error });
+      console.warn("[send-mail] resend failed for", p.email, "->", r.error);
     }
   }
 
-  return json({ ok: true, queued, sent });
+  return json({ ok: true, queued, sent, recipients: breakdown, resend_key_set: !!RESEND_API_KEY, from: MAIL_FROM });
 }
 
 async function handleIssueComment(issueCommentId: string): Promise<Response> {
+  if (!RESEND_API_KEY) {
+    console.warn("[send-mail] RESEND_API_KEY not set — emails will NOT send. Run `supabase secrets set RESEND_API_KEY=...`");
+  }
   const { data: c, error: cErr } = await admin
     .from("issue_comments")
     .select("id, issue_id, author_id, body, mentions, created_at")
@@ -250,6 +260,7 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
 
   let sent = 0;
   let queued = 0;
+  const breakdown: Array<{ user_id: string; status: string; detail?: string }> = [];
   for (const p of profiles ?? []) {
     const isMention = (c.mentions ?? []).includes(p.id);
     const kind = isMention ? "mention" : "reply";
@@ -270,7 +281,8 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
     queued++;
 
     const wants = (isMention && p.notify_mentions) || (!isMention && p.notify_replies);
-    if (!wants || !p.email) continue;
+    if (!wants) { breakdown.push({ user_id: p.id, status: "skip", detail: `notify_${kind === "mention" ? "mentions" : "replies"}=false` }); continue; }
+    if (!p.email) { breakdown.push({ user_id: p.id, status: "skip", detail: "no email" }); continue; }
 
     const { subject, html } = renderIssueEmail({
       recipientName: p.name,
@@ -283,17 +295,19 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
     const r = await sendResendMail(p.email, subject, html);
     if (r.ok) {
       sent++;
+      breakdown.push({ user_id: p.id, status: "sent" });
       await admin
         .from("notifications")
         .update({ emailed_at: new Date().toISOString() })
         .eq("user_id", p.id)
         .eq("issue_comment_id", c.id);
     } else {
-      console.warn("mail failed for", p.email, r.error);
+      breakdown.push({ user_id: p.id, status: "resend_error", detail: r.error });
+      console.warn("[send-mail] resend failed for", p.email, "->", r.error);
     }
   }
 
-  return json({ ok: true, queued, sent });
+  return json({ ok: true, queued, sent, recipients: breakdown, resend_key_set: !!RESEND_API_KEY, from: MAIL_FROM });
 }
 
 function json(obj: Record<string, unknown>, status = 200): Response {
