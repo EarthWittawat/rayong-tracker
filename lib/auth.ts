@@ -105,6 +105,20 @@ export function useSession(): SessionState & AuthActions & { needsProfileSetup: 
 
     async function load(session: Session | null) {
       if (cancelled) return;
+      // Realtime channels need the authenticated JWT so other users can
+      // see each other's presence + broadcast events when Realtime
+      // authorization (RLS-on-realtime) is enabled on the project.
+      // Without this, presence stays self-only and "I cannot see my friend".
+      try {
+        if (session?.access_token) {
+          sb!.realtime.setAuth(session.access_token);
+        } else {
+          sb!.realtime.setAuth(null as unknown as string);
+        }
+      } catch (e) {
+        console.warn("realtime.setAuth failed:", e);
+      }
+
       if (!session?.user) {
         setState({ loading: false, session: null, user: null, profile: null });
         setNeedsProfileSetup(false);
