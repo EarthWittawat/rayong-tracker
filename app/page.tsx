@@ -13,6 +13,7 @@ import { LoginGate } from "@/components/LoginGate";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ClassInsights } from "@/components/ClassInsights";
 import { BoardView } from "@/components/BoardView";
+import { PipelineGuide } from "@/components/PipelineGuide";
 import { computeProgress } from "@/lib/progress";
 import { isLive, STAGES } from "@/lib/supabase";
 import type { Member, StageKey } from "@/lib/supabase";
@@ -292,6 +293,8 @@ export default function Page() {
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 
         <OverviewStrip members={members} tasks={tasks} />
+
+        <PipelineGuide tasks={tasks} />
 
         <section className="rounded-xl2 bg-surface border border-border shadow-card overflow-hidden">
           <div className="px-6 pt-5 pb-3 flex items-start justify-between gap-3 flex-wrap border-b border-border">
