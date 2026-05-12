@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { Member, Task } from "@/lib/supabase";
 import { STAGES } from "@/lib/supabase";
 import { computeProgress } from "@/lib/progress";
 import { StageRow } from "./StageRow";
 import type { SaveState, ActivityEvent } from "@/lib/useStore";
 import type { Profile } from "@/lib/auth";
+import { formatRelative } from "@/lib/relativeTime";
 
 export function MemberCard({
   member, tasks, focused, onFocus, onPatchTask, onPatchMember, onRemove, saveStates, editing, profile, profiles,
+  lastActiveAt, expanded,
 }: {
   member: Member;
   tasks: Task[];
@@ -22,10 +24,19 @@ export function MemberCard({
   editing: Record<string, { user: ActivityEvent["user"]; expiresAt: number }>;
   profile: Profile;
   profiles: Profile[];
+  lastActiveAt?: number;
+  expanded?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const [editingName, setEditingName] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+
+  // Follow the "expand all / collapse all" toolbar toggle when it changes.
+  useEffect(() => {
+    if (expanded !== undefined) setOpen(expanded);
+  }, [expanded]);
+
+  const lastActiveLabel = formatRelative(lastActiveAt);
 
   const myTasks = useMemo(() => {
     const byStage = new Map(tasks.map(t => [t.stage, t]));
@@ -108,6 +119,15 @@ export function MemberCard({
                title="tiles done / tiles total · stage-avg shown in parens">
             {stats.done.toLocaleString()} / {stats.total.toLocaleString()} <span className="text-muted2">({stats.avgStagesPct.toFixed(0)}% stage-avg)</span>
           </div>
+          {lastActiveLabel && (
+            <div
+              className="mt-0.5 text-[10px] text-muted2 tabular inline-flex items-center gap-1 justify-end"
+              title={lastActiveAt ? new Date(lastActiveAt).toLocaleString() : ""}
+            >
+              <span className="w-1 h-1 rounded-full bg-muted2" />
+              {lastActiveLabel}
+            </div>
+          )}
         </div>
 
         <button

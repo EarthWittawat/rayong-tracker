@@ -19,7 +19,7 @@ import type { Member } from "@/lib/supabase";
 const PALETTE = ["#C96442", "#3F6E97", "#3F7D58", "#B68A2E", "#7B5BA6", "#9B5C7A", "#4F7A95", "#7C7A52"];
 const EMOJI   = ["🌾", "🛰️", "🌱", "🌳", "✨", "🌻", "🍃", "🌿"];
 
-type SortMode = "default" | "progress-desc" | "progress-asc" | "name";
+type SortMode = "default" | "progress-desc" | "progress-asc" | "name" | "recent";
 
 export default function Page() {
   const supaConfigured = isLive();
@@ -37,17 +37,46 @@ export default function Page() {
   const [undo, setUndo] = useState<{ name: string; restore: () => Promise<void> } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // member-grid filters / view
+  const [query, setQuery] = useState("");
+  const [quadFilter, setQuadFilter] = useState<"all" | "NW" | "NE" | "SW" | "SE" | "ALL">("all");
+  const [incompleteOnly, setIncompleteOnly] = useState(false);
+  const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
+
+  const lastActiveByMember = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of tasks) {
+      if (!t.updated_at) continue;
+      const ts = Date.parse(t.updated_at);
+      if (!Number.isFinite(ts)) continue;
+      const prev = m.get(t.member_id) ?? 0;
+      if (ts > prev) m.set(t.member_id, ts);
+    }
+    return m;
+  }, [tasks]);
+
   const sortedMembers = useMemo(() => {
-    if (sortMode === "default") return members;
-    const withPct = members.map(m => ({
+    const withMeta = members.map(m => ({
       m,
       pct: computeProgress(tasks.filter(t => t.member_id === m.id)).weightedPct,
+      lastActive: lastActiveByMember.get(m.id) ?? 0,
     }));
-    if (sortMode === "progress-desc") withPct.sort((a, b) => b.pct - a.pct);
-    else if (sortMode === "progress-asc") withPct.sort((a, b) => a.pct - b.pct);
-    else if (sortMode === "name") withPct.sort((a, b) => a.m.name.localeCompare(b.m.name));
-    return withPct.map(x => x.m);
-  }, [members, tasks, sortMode]);
+    if (sortMode === "progress-desc") withMeta.sort((a, b) => b.pct - a.pct);
+    else if (sortMode === "progress-asc") withMeta.sort((a, b) => a.pct - b.pct);
+    else if (sortMode === "name") withMeta.sort((a, b) => a.m.name.localeCompare(b.m.name));
+    else if (sortMode === "recent") withMeta.sort((a, b) => b.lastActive - a.lastActive);
+    return withMeta;
+  }, [members, tasks, sortMode, lastActiveByMember]);
+
+  const filteredMembers = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return sortedMembers.filter(({ m, pct }) => {
+      if (q && !m.name.toLowerCase().includes(q)) return false;
+      if (quadFilter !== "all" && m.quadrant !== quadFilter) return false;
+      if (incompleteOnly && pct >= 100) return false;
+      return true;
+    });
+  }, [sortedMembers, query, quadFilter, incompleteOnly]);
 
   function handleAdd() {
     const id = `m_${Math.random().toString(36).slice(2, 8)}`;
@@ -113,7 +142,7 @@ export default function Page() {
               <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[rgb(var(--c-accent))] ring-2 ring-[rgb(var(--c-nav-bg))]" />
             </div>
             <div className="min-w-0 leading-tight">
-              <div className="eyebrow text-[10px] nav-muted">Mission · Rayong / Sentinel-2</div>
+              <div className="eyebrow text-[10px] nav-muted">Sentinel-2 · Rayong AOI</div>
               <h1 className="text-base font-bold nav-ink truncate">Rayong Crop Tracker</h1>
             </div>
           </div>
@@ -128,7 +157,7 @@ export default function Page() {
             )}
             <span className={`hidden sm:inline-flex items-center gap-1.5 text-[10px] eyebrow px-2.5 py-1 rounded-sm border tabular ${live ? "border-good/60 text-good bg-good/10" : "border-warn/60 text-warn bg-warn/10"}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${live ? "bg-good" : "bg-warn"} pulse-soft`} />
-              {live ? "live link" : "offline"}
+              {live ? "synced" : "offline"}
             </span>
             <ThemeToggle />
             <button
@@ -214,30 +243,83 @@ export default function Page() {
             <div>
               <div className="text-[11px] uppercase tracking-[0.12em] text-muted2 font-medium">Team</div>
               <h2 className="text-lg font-semibold text-ink mt-0.5">
-                Members <span className="text-muted2 font-normal tabular text-sm">· {members.length}</span>
+                Crew <span className="text-muted2 font-normal tabular text-sm">· {filteredMembers.length}/{members.length}</span>
               </h2>
             </div>
-            <div className="flex items-center gap-3 text-xs">
-              <label className="inline-flex items-center gap-2 text-muted2">
+            <div className="hidden lg:flex items-center gap-1 text-xs text-muted2">
+              <kbd className="px-1 py-0.5 rounded bg-surface2 border border-border tabular text-[10px]">+/−</kbd> bump
+              <span className="mx-1">·</span>
+              <kbd className="px-1 py-0.5 rounded bg-surface2 border border-border tabular text-[10px]">⇧</kbd> ×5
+              <span className="mx-1">·</span>
+              <kbd className="px-1 py-0.5 rounded bg-surface2 border border-border tabular text-[10px]">c</kbd> comments
+            </div>
+          </div>
+
+          {/* filter / view toolbar */}
+          <div className="rounded-lg border border-border bg-surface p-3 flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px] max-w-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                   className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted2 pointer-events-none">
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="search crew…"
+                className="w-full pl-8 pr-2 py-1.5 text-xs rounded-md bg-surface2 border border-border text-ink placeholder:text-muted2 outline-none focus:border-accent"
+              />
+              {query && (
+                <button
+                  onClick={() => setQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted2 hover:text-ink"
+                  aria-label="clear search"
+                >×</button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5 bg-surface2">
+              {(["all","NW","NE","SW","SE","ALL"] as const).map(q => (
+                <button
+                  key={q}
+                  onClick={() => setQuadFilter(q)}
+                  className={`text-[11px] tabular px-2 py-1 rounded transition-colors ${quadFilter === q ? "bg-ink text-bg" : "text-muted hover:text-ink"}`}
+                  title={q === "all" ? "all quadrants" : q === "ALL" ? "cross-cutting (ALL)" : `quadrant ${q}`}
+                >{q === "all" ? "·" : q}</button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => setIncompleteOnly(v => !v)}
+              className={`text-[11px] px-2.5 py-1.5 rounded-md border transition-colors ${incompleteOnly ? "bg-accent/15 border-accent text-accent" : "border-border text-muted hover:text-ink hover:bg-surface2"}`}
+            >
+              incomplete only
+            </button>
+
+            <div className="ml-auto flex items-center gap-2">
+              <label className="inline-flex items-center gap-2 text-[11px] text-muted2">
                 sort
                 <select
                   value={sortMode}
                   onChange={(e) => setSortMode(e.target.value as SortMode)}
-                  className="bg-surface border border-border rounded-md px-2 py-1 text-ink outline-none hover:bg-surface2 cursor-pointer"
+                  className="bg-surface border border-border rounded-md px-2 py-1 text-ink outline-none hover:bg-surface2 cursor-pointer text-[11px]"
                 >
                   <option value="default">default</option>
                   <option value="progress-desc">progress · high→low</option>
                   <option value="progress-asc">progress · low→high</option>
+                  <option value="recent">most recently active</option>
                   <option value="name">name (A→Z)</option>
                 </select>
               </label>
-              <span className="hidden lg:inline text-muted2">
-                <kbd className="px-1 py-0.5 rounded bg-surface2 border border-border tabular text-[10px]">+/−</kbd> bump · <kbd className="px-1 py-0.5 rounded bg-surface2 border border-border tabular text-[10px]">⇧</kbd> ×5 · <kbd className="px-1 py-0.5 rounded bg-surface2 border border-border tabular text-[10px]">c</kbd> comments
-              </span>
+              <button
+                onClick={() => setAllExpanded(prev => prev === false ? true : false)}
+                className="text-[11px] px-2.5 py-1.5 rounded-md border border-border text-muted hover:text-ink hover:bg-surface2"
+                title={allExpanded === false ? "expand all" : "collapse all"}
+              >{allExpanded === false ? "expand all" : "collapse all"}</button>
             </div>
           </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {sortedMembers.map(m => (
+            {filteredMembers.map(({ m }) => (
               <MemberCard
                 key={m.id}
                 member={m}
@@ -251,13 +333,24 @@ export default function Page() {
                 editing={editing}
                 profile={profile}
                 profiles={profiles}
+                lastActiveAt={lastActiveByMember.get(m.id)}
+                expanded={allExpanded}
               />
             ))}
-            {sortedMembers.length === 0 && (
+            {filteredMembers.length === 0 && members.length > 0 && (
+              <div className="col-span-full text-center py-10 rounded-xl2 border-2 border-dashed border-border">
+                <div className="text-sm text-ink font-medium">No crew matches the filters</div>
+                <button
+                  onClick={() => { setQuery(""); setQuadFilter("all"); setIncompleteOnly(false); }}
+                  className="mt-3 text-xs px-3 py-1.5 rounded-md border border-border text-muted hover:text-ink hover:bg-surface2"
+                >reset filters</button>
+              </div>
+            )}
+            {members.length === 0 && (
               <div className="col-span-full text-center py-12 rounded-xl2 border-2 border-dashed border-border">
-                <div className="text-3xl mb-2">🌱</div>
-                <div className="text-sm text-ink font-medium">No members yet</div>
-                <div className="text-xs text-muted2 mt-1 mb-4">Members are added automatically when teammates sign in.</div>
+                <div className="text-3xl mb-2">🛰️</div>
+                <div className="text-sm text-ink font-medium">No crew yet</div>
+                <div className="text-xs text-muted2 mt-1 mb-4">Crew rows are added automatically when teammates sign in.</div>
                 <button
                   onClick={handleAdd}
                   className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-ink text-bg hover:opacity-90 transition-opacity"
@@ -273,10 +366,10 @@ export default function Page() {
         <div className="h-[3px] w-full bg-[rgb(var(--c-accent))]" />
         <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
           <div>
-            <div className="eyebrow text-[10px] nav-muted mb-1">Mission</div>
+            <div className="eyebrow text-[10px] nav-muted mb-1">About</div>
             <div className="nav-ink font-semibold">Rayong Crop Tracker</div>
             <p className="nav-muted mt-1 leading-relaxed">
-              Edits sync in real time via Supabase. Map imagery © Esri, Maxar, Earthstar Geographics.
+              Real-time team board for the Sentinel-2 crop-mapping pipeline. Edits sync via Supabase.
             </p>
           </div>
           <div>
@@ -288,7 +381,8 @@ export default function Page() {
             <ul className="nav-muted space-y-0.5">
               <li>CDSE OpenEO (Sentinel-2)</li>
               <li>LDD landuse shapefile</li>
-              <li>OpenSR / DiffusionSat (SR + GenAI)</li>
+              <li>Esri / Maxar imagery</li>
+              <li>OpenSR · DiffusionSat (SR + GenAI)</li>
             </ul>
           </div>
         </div>

@@ -37,21 +37,25 @@ export function LoginGate({
       <div className="absolute top-4 right-4"><ThemeToggle /></div>
 
       <div className="relative w-full max-w-md text-center text-[rgb(var(--c-nav-ink))]">
-        {/* mission patch */}
-        <div
-          className="mx-auto mb-6 w-20 h-20 rounded-full flex items-center justify-center ring-4 ring-white/20"
-          style={{ background: "linear-gradient(135deg, rgb(var(--c-info)) 0%, rgb(var(--c-accent)) 100%)" }}
-        >
-          <div className="w-16 h-16 rounded-full ring-2 ring-white/85 flex flex-col items-center justify-center">
-            <span className="text-xs font-bold tracking-widest text-white">RYG-1</span>
-            <span className="text-[9px] tracking-[0.3em] text-white/80 mt-0.5">RAYONG</span>
+        {/* satellite glyph */}
+        <div className="relative mx-auto mb-6 w-24 h-24 flex items-center justify-center">
+          {/* orbit ring */}
+          <span className="absolute inset-0 rounded-full ring-1 ring-white/15" />
+          <span className="absolute inset-2 rounded-full ring-1 ring-white/10" />
+          {/* satellite body */}
+          <div
+            className="relative w-16 h-16 rounded-full flex items-center justify-center ring-2 ring-white/85"
+            style={{ background: "linear-gradient(135deg, rgb(var(--c-info)) 0%, rgb(var(--c-accent)) 100%)" }}
+          >
+            <span className="text-sm font-bold tracking-widest text-white">RYG</span>
           </div>
+          {/* tiny orbital pulse dot */}
+          <span className="absolute top-1 right-3 w-1.5 h-1.5 rounded-full bg-white/80 pulse-soft" />
         </div>
 
-        <div className="eyebrow text-[10px] text-white/60 mb-2">Mission control · access required</div>
         <h1 className="text-3xl font-bold text-white">Rayong Crop Tracker</h1>
         <p className="text-sm text-white/70 mt-2 mb-8 max-w-sm mx-auto">
-          Sentinel-2 → SR → GenAI → Features → RF. Sign in with Google to join the mission.
+          Real-time team board for the Sentinel-2 crop-mapping pipeline. Sign in with Google to join the board.
         </p>
 
         <div className="bg-[rgb(var(--c-nav-bg2))]/85 backdrop-blur-md border border-[rgb(var(--c-nav-border))] rounded-md p-5 text-left">
@@ -82,12 +86,12 @@ export function LoginGate({
           </p>
         </div>
 
-        <div className="mt-6 flex items-center justify-center gap-3 text-[10px] eyebrow text-white/40 tabular">
-          <span>v1.0</span>
-          <span className="w-1 h-1 rounded-full bg-white/30" />
+        <div className="mt-6 flex items-center justify-center gap-3 text-[10px] eyebrow text-white/45 tabular">
           <span>Sentinel-2 L2A</span>
           <span className="w-1 h-1 rounded-full bg-white/30" />
-          <span>CDSE · OpenEO</span>
+          <span>SR ×4</span>
+          <span className="w-1 h-1 rounded-full bg-white/30" />
+          <span>Random Forest</span>
         </div>
       </div>
     </main>
