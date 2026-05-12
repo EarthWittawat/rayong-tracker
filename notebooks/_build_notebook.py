@@ -55,14 +55,21 @@ All cells are designed to run end-to-end on a single Rayong AOI (defaults to a 1
 # ============================================================================
 md("""## 1 · Setup
 
-Install the heavy deps once (run the next cell, then comment it out).
+**Recommended:** create the conda env from `notebooks/environment.yml` (see `notebooks/README.md`) — that bundles the GDAL chain through conda-forge and avoids most Windows install pain.
+
+```bash
+conda env create -f notebooks/environment.yml
+conda activate rayong-tracker
+```
+
+If you would rather pip-install into your current env, run the next cell once (then comment it out). DiffusionSat is not on PyPI — clone it once via the second line if you want §4b.
 """)
 
-code(r"""# === one-time install (uncomment, run, then re-comment) ===
+code(r"""# === one-time pip install (uncomment, run, then re-comment) ===
 # !pip install -q --upgrade \
 #     openeo "openeo-processes-dask[implementations]" \
 #     pystac-client planetary-computer rasterio rioxarray xarray \
-#     geopandas shapely pyproj fiona \
+#     geopandas shapely pyproj fiona mgrs \
 #     opensr-model opensr-test sen2sr \
 #     diffusers transformers accelerate peft safetensors \
 #     scikit-image scikit-learn imbalanced-learn \
@@ -207,10 +214,11 @@ code(r'''def fetch_s2_monthly_median(cfg: Config) -> Path:
         max_cloud_cover=85,
     )
 
-    # SCL mask: keep classes in {4,5,6,7,11}; drop cloud/shadow/cirrus
+    # SCL mask: drop cloud-shadow (3), medium-cloud (8), high-cloud (9), cirrus (10).
+    # openEO `cube.mask(cond)` sets nodata WHERE cond is true, so we feed it the *bad* mask directly.
     scl = cube.band(cfg.scl_band)
-    mask = ~ ((scl == 3) | (scl == 8) | (scl == 9) | (scl == 10))
-    cube = cube.mask(mask.logical_not())
+    bad_scl = (scl == 3) | (scl == 8) | (scl == 9) | (scl == 10)
+    cube = cube.mask(bad_scl)
 
     # drop SCL after masking; resample 20m bands to 10m
     cube = cube.filter_bands(list(cfg.bands_10m) + list(cfg.bands_20m))
