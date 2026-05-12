@@ -140,15 +140,15 @@ export function ClassInsights() {
                 return (
                   <div key={c.id} className="flex items-center gap-3">
                     <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: color }} />
-                    <div className="w-40 shrink-0 text-xs text-ink truncate flex items-center gap-1.5" title={label}>
+                    <div className="w-24 sm:w-40 shrink-0 text-xs text-ink truncate flex items-center gap-1.5" title={label}>
                       {label}
-                      {isMinority && <span className="text-[9px] px-1 rounded bg-warn/20 text-warn font-medium">minority</span>}
+                      {isMinority && <span className="text-[9px] px-1 rounded bg-warn/20 text-warn font-medium hidden sm:inline">minority</span>}
                     </div>
                     <div className="flex-1 h-2 rounded-full bg-surface overflow-hidden">
                       <div className="h-full rounded-full transition-all" style={{ width: `${c.share * 100}%`, background: color }} />
                     </div>
-                    <div className="w-16 text-right text-xs tabular text-ink font-medium">{(c.share * 100).toFixed(1)}%</div>
-                    <div className="w-20 text-right text-[10px] tabular text-muted2">{c.area_km2.toFixed(1)} km²</div>
+                    <div className="w-12 sm:w-16 text-right text-xs tabular text-ink font-medium">{(c.share * 100).toFixed(1)}%</div>
+                    <div className="hidden sm:block w-20 text-right text-[10px] tabular text-muted2">{c.area_km2.toFixed(1)} km²</div>
                   </div>
                 );
               })}

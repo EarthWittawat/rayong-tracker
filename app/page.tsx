@@ -209,23 +209,23 @@ export default function Page() {
   return (
     <main className="min-h-screen">
       <header className="nasa-nav sticky top-0 z-[1100]">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
-          <div className="min-w-0 flex items-center gap-3">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="min-w-0 flex items-center gap-2 sm:gap-3">
             <div
-              className="relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ring-2 ring-white/85"
+              className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 ring-2 ring-white/85"
               style={{ background: "linear-gradient(135deg, rgb(var(--c-info)) 0%, rgb(var(--c-accent)) 100%)" }}
               title="Mission patch"
             >
-              <span className="text-[10px] font-bold tracking-wider text-white">RYG</span>
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[rgb(var(--c-accent))] ring-2 ring-[rgb(var(--c-nav-bg))]" />
+              <span className="text-[9px] sm:text-[10px] font-bold tracking-wider text-white">RYG</span>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[rgb(var(--c-accent))] ring-2 ring-[rgb(var(--c-nav-bg))]" />
             </div>
             <div className="min-w-0 leading-tight">
-              <div className="eyebrow text-[10px] nav-muted">Sentinel-2 · Rayong AOI</div>
-              <h1 className="text-base font-bold nav-ink truncate">Rayong Crop Tracker</h1>
+              <div className="hidden sm:block eyebrow text-[10px] nav-muted truncate">Sentinel-2 · Rayong AOI</div>
+              <h1 className="text-sm sm:text-base font-bold nav-ink truncate">Rayong Crop Tracker</h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {live && (
               <PresenceBar
                 users={presence}

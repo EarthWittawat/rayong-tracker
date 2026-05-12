@@ -62,13 +62,13 @@ export function OverviewStrip({ members, tasks }: { members: Member[]; tasks: Ta
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 border-t border-border bg-surface2/30">
+      <div className="grid grid-cols-2 md:grid-cols-5 border-t border-border bg-surface2/30">
         {stageEntries.map(({ s, v, pct }) => {
           const isLead = leader && leader.s.key === s.key && pct > 0;
           return (
             <div
               key={s.key}
-              className="px-4 py-3 border-r border-border last:border-r-0 sm:border-r [&:nth-child(2n)]:border-r-0 sm:[&:nth-child(2n)]:border-r [&:nth-child(2)]:sm:border-r [&:nth-child(5)]:sm:border-r-0 border-b sm:border-b-0 last:border-b-0 [&:nth-last-child(-n+1)]:border-b-0"
+              className="px-4 py-3 border-r border-border last:border-r-0 md:border-r [&:nth-child(2n)]:border-r-0 md:[&:nth-child(2n)]:border-r [&:nth-child(2)]:md:border-r [&:nth-child(5)]:md:border-r-0 border-b md:border-b-0 last:border-b-0"
               title={s.hint}
             >
               <div className="flex items-center justify-between">
