@@ -126,17 +126,31 @@ md("""### 1.1 · Configuration
 All paths and AOI defaults live here. Override before running anything below.
 """)
 
-code(r'''@dataclass
-class Config:
-    # repo + workspace
-    repo_root:      Path = Path(__file__).resolve().parents[1] if "__file__" in globals() else Path("D:/Github/genai-tracker")
-    work_root:      Path = Path("D:/work/GIS/rf/preprocess")
-    cache_root:     Path = Path("D:/work/GIS/rf/preprocess/_cache")
-    out_root:       Path = Path("D:/work/GIS/rf/preprocess/_out")
+code(r'''# Resolve the repo root no matter where the notebook lives — works whether
+# this file has __file__ defined (script) or not (Jupyter kernel).
+def _repo_root_default() -> Path:
+    if "__file__" in globals():
+        return Path(__file__).resolve().parents[1]
+    here = Path.cwd().resolve()
+    for p in (here, *here.parents):
+        if (p / "package.json").exists() and (p / "notebooks").exists():
+            return p
+    return here
 
-    # LDD inputs (already on disk)
-    ldd_landuse:    Path = Path("D:/work/GIS/rf/preprocess/full_dataset/Landuse_ryg/ระยอง2567/การใช้ที่ดิน")
-    ldd_admin:      Path = Path("D:/work/GIS/rf/preprocess/full_dataset/Landuse_ryg/ระยอง2567/ขอบเขตการปกครอง")
+
+@dataclass
+class Config:
+    # repo + workspace. Everything lives under <repo>/data/ so the team can
+    # share the same notebook + relative paths regardless of laptop layout.
+    repo_root:      Path = field(default_factory=_repo_root_default)
+    work_root:      Path = None  # filled in __post_init__
+    cache_root:     Path = None
+    out_root:       Path = None
+
+    # LDD inputs (move the shapefiles to <repo>/data/landuse_ryg and
+    # <repo>/data/admin_ryg respectively; paths are resolved below).
+    ldd_landuse:    Path = None
+    ldd_admin:      Path = None
 
     # AOI assignment.
     #   "FULL"  → whole province
@@ -167,7 +181,7 @@ class Config:
     sr_scale:       int   = 4              # 10 m → 2.5 m (opensr-model is fixed at 4×)
 
     # generative aug
-    diffusionsat_repo: Path = Path("D:/Github/genai-tracker/external/DiffusionSat")
+    diffusionsat_repo: Path = None
     minority_classes:  tuple = ("A203", "A302", "A401")  # adjust to your LU codes
     samples_per_minor: int   = 200
 
@@ -177,6 +191,18 @@ class Config:
     cascade:         bool = True
 
     seed: int = 42
+
+    def __post_init__(self):
+        # All large inputs / outputs live under <repo>/data and are
+        # gitignored at the cache + output level. Move your shapefiles
+        # into <repo>/data/landuse_ryg/ and <repo>/data/admin_ryg/.
+        data = self.repo_root / "data"
+        if self.work_root          is None: self.work_root          = data
+        if self.cache_root         is None: self.cache_root         = data / "_cache"
+        if self.out_root           is None: self.out_root           = data / "_out"
+        if self.ldd_landuse        is None: self.ldd_landuse        = data / "landuse_ryg"
+        if self.ldd_admin          is None: self.ldd_admin          = data / "admin_ryg"
+        if self.diffusionsat_repo  is None: self.diffusionsat_repo  = self.repo_root / "notebooks" / "external" / "DiffusionSat"
 
 # --- Quadrant bboxes (lng/lat, west/south/east/north) ------------------------
 # Mirror the constants in lib/rayong.ts so the notebook + website agree on

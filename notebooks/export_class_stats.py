@@ -229,7 +229,7 @@ def resolve_shapefile(path: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export public/class-stats.json from the LDD landuse shapefile.")
-    parser.add_argument("--shp", type=Path, required=True, help="LDD landuse shapefile or directory containing one")
+    parser.add_argument("--shp", type=Path, default=None, help="LDD landuse shapefile or directory containing one. Defaults to <repo>/data/landuse_ryg.")
     parser.add_argument("--preset", choices=sorted(PRESETS.keys()), default="rayong-crops-15",
                         help="Curated class set. 'rayong-crops-15' maps LU_DES_EN to the 14 crop classes the team trains on plus an 'Others' bucket. Pass --preset '' (empty) to disable presets and group by --class-col instead.")
     parser.add_argument("--class-col", default="LUL2_CODE", help="When --preset is empty, the column to group by. Default LUL2_CODE (~15-20 classes).")
@@ -247,8 +247,11 @@ def main() -> int:
     # Repo root = parent of notebooks/
     repo_root = Path(__file__).resolve().parents[1]
     out_path = args.out or (repo_root / "public" / "class-stats.json")
+    shp_arg = args.shp or (repo_root / "data" / "landuse_ryg")
+    if not shp_arg.exists():
+        raise FileNotFoundError(f"shapefile path does not exist: {shp_arg}. Pass --shp or move the LDD landuse files into <repo>/data/landuse_ryg/")
 
-    shp = resolve_shapefile(args.shp)
+    shp = resolve_shapefile(shp_arg)
     print(f"reading {shp.name} ...")
     lu = gpd.read_file(shp)
     if args.class_col not in lu.columns:

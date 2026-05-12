@@ -18,6 +18,14 @@ notebooks/cache/
 *.ckpt
 *.joblib
 
+# pipeline data — large shapefiles + cached rasters + model dumps live under
+# <repo>/data. Each teammate copies their own shapefile into data/ following
+# data/README.md; nothing in here belongs in git.
+data/_cache/
+data/_out/
+data/landuse_ryg/
+data/admin_ryg/
+
 # Supabase CLI scratch
 supabase/.temp/
 
