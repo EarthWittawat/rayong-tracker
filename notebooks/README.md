@@ -77,6 +77,18 @@ python -m ipykernel install --user --name synthcrop-dsat --display-name "Python 
 git clone https://github.com/samar-khanna/DiffusionSat.git external/DiffusionSat
 ```
 
+**Weights are not on a public HF repo.** `samar-khanna/DiffusionSat` returns 401 / "Repository Not Found". Open `external/DiffusionSat/README.md`, find the Google Drive link under *Pre-trained checkpoints*, download the snapshot folder, then point the loader at it:
+
+```bash
+# either: drop the snapshot under the conventional path the notebook tries first
+mv ~/Downloads/diffusionsat_snapshot notebooks/external/DiffusionSat/weights/snapshot
+
+# or: set an explicit env var (Windows PowerShell example)
+$env:DSAT_MODEL_PATH = "D:\\path\\to\\diffusionsat_snapshot"
+```
+
+Once the local path resolves, the notebook + CLI load DSAT without hitting HF.
+
 Then you have two ways to sample, both producing the same `.npy + .png` layout under `data/_cache/synth/<class>/`:
 
 | How                     | When to use                                                              |

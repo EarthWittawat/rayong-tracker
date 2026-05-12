@@ -114,6 +114,12 @@ def _pil_to_4band(img: Image.Image) -> np.ndarray:
 
 
 def load_pipeline() -> "DiffusionSatPipeline":  # type: ignore[name-defined]
+    """Load DSAT, preferring a local snapshot since the HF repo
+    `samar-khanna/DiffusionSat` returns 401 (not a public repo). Honour
+    DSAT_MODEL_PATH for an explicit on-disk snapshot, and HF_TOKEN if a
+    gated HF mirror exists."""
+    import os
+
     if not DSAT_REPO.exists():
         raise SystemExit(
             f"DiffusionSat repo not found at {DSAT_REPO}.\n"
@@ -125,9 +131,32 @@ def load_pipeline() -> "DiffusionSatPipeline":  # type: ignore[name-defined]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.float16 if device == "cuda" else torch.float32
-    pipe = DiffusionSatPipeline.from_pretrained(
-        "samar-khanna/DiffusionSat", torch_dtype=dtype,
-    ).to(device)
+
+    model_id = os.environ.get("DSAT_MODEL_ID", "samar-khanna/DiffusionSat")
+    local    = os.environ.get("DSAT_MODEL_PATH", "")
+    if not local:
+        guess = DSAT_REPO / "weights" / "snapshot"
+        if guess.exists():
+            local = str(guess)
+    model_src = local if local and Path(local).exists() else model_id
+    print(f"loading DSAT from {model_src}")
+    token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+    try:
+        pipe = DiffusionSatPipeline.from_pretrained(
+            model_src, torch_dtype=dtype, use_auth_token=token,
+        ).to(device)
+    except Exception as e:
+        raise SystemExit(
+            f"Failed to load DiffusionSat from {model_src!r}: {e}\n\n"
+            f"DSAT weights are not on a public HF repo. Either:\n"
+            f"  (a) download the snapshot folder via the Google Drive link\n"
+            f"      in {DSAT_REPO / 'README.md'} and set\n"
+            f"          DSAT_MODEL_PATH=/abs/path/to/snapshot\n"
+            f"      then re-run this script.\n"
+            f"  (b) if a gated HF mirror exists, run\n"
+            f"          huggingface-cli login\n"
+            f"      after accepting the license, then re-run."
+        ) from e
     print(f"DiffusionSat loaded on {device} (dtype={dtype})")
     return pipe
 
