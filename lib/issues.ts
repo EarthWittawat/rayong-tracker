@@ -241,6 +241,10 @@ export function useIssueComments(issueId: string | null) {
       .insert({ issue_id: issueId, author_id: profile.id, body, mentions })
       .select("*").single();
     if (error) { console.warn("issue addComment failed:", error.message); return null; }
+    // Fire-and-forget email fan-out: @mentions + assignee, minus author.
+    // Edge Function logs notifications + sends Resend mail.
+    sb.functions.invoke("send-mail", { body: { issue_comment_id: (data as IssueComment).id } })
+      .catch(err => console.warn("send-mail (issue) invoke failed:", err?.message ?? err));
     return data as IssueComment;
   }, [issueId]);
 
