@@ -47,38 +47,40 @@ export type SessionState = {
   user: User | null;
   profile: Profile | null;
   /**
-   * True when the signed-in email is present in public.allowed_users.
+   * True when the signed-in user is on the `dashboard_members` roster.
    * Null means the check hasn't completed yet; false means signed in but
-   * not on the allowlist → render the access-pending gate.
+   * not yet a member → render the access-pending gate.
    */
-  allowed: boolean | null;
+  member: boolean | null;
 };
 
 export type AuthActions = {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (patch: Partial<Omit<Profile, "id" | "created_at" | "updated_at">>) => Promise<void>;
+  redeemInvite: (code: string) => Promise<{ ok: boolean; message: string }>;
+  refreshMembership: () => Promise<void>;
 };
 
 export function useSession(): SessionState & AuthActions & { needsProfileSetup: boolean } {
-  const [state, setState] = useState<SessionState>({ loading: true, session: null, user: null, profile: null, allowed: null });
+  const [state, setState] = useState<SessionState>({ loading: true, session: null, user: null, profile: null, member: null });
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
 
-  const checkAllowed = useCallback(async (email: string | null | undefined): Promise<boolean> => {
+  const checkMember = useCallback(async (userId: string | null | undefined): Promise<boolean> => {
     const sb = getSupabase();
-    if (!sb || !email) return false;
+    if (!sb || !userId) return false;
     try {
       const { count, error } = await sb
-        .from("allowed_users")
-        .select("email", { count: "exact", head: true })
-        .ilike("email", email);
+        .from("dashboard_members")
+        .select("user_id", { count: "exact", head: true })
+        .eq("user_id", userId);
       if (error) {
-        console.warn("allowed_users check error:", error.message);
+        console.warn("dashboard_members check error:", error.message);
         return false;
       }
       return (count ?? 0) > 0;
     } catch (e) {
-      console.warn("allowed_users check threw:", e);
+      console.warn("dashboard_members check threw:", e);
       return false;
     }
   }, []);
@@ -122,7 +124,7 @@ export function useSession(): SessionState & AuthActions & { needsProfileSetup: 
   useEffect(() => {
     const sb = getSupabase();
     if (!sb || !isLive()) {
-      setState({ loading: false, session: null, user: null, profile: null, allowed: null });
+      setState({ loading: false, session: null, user: null, profile: null, member: null });
       return;
     }
 
@@ -141,15 +143,15 @@ export function useSession(): SessionState & AuthActions & { needsProfileSetup: 
       }
 
       if (!session?.user) {
-        setState({ loading: false, session: null, user: null, profile: null, allowed: null });
+        setState({ loading: false, session: null, user: null, profile: null, member: null });
         setNeedsProfileSetup(false);
         return;
       }
       const { profile, isNew } = await ensureProfile(session.user);
       if (cancelled) return;
-      const allowed = await checkAllowed(session.user.email);
+      const member = await checkMember(session.user.id);
       if (cancelled) return;
-      setState({ loading: false, session, user: session.user, profile, allowed });
+      setState({ loading: false, session, user: session.user, profile, member });
       setNeedsProfileSetup(isNew);
     }
 
@@ -163,7 +165,7 @@ export function useSession(): SessionState & AuthActions & { needsProfileSetup: 
       cancelled = true;
       sub.subscription.unsubscribe();
     };
-  }, [ensureProfile, checkAllowed]);
+  }, [ensureProfile, checkMember]);
 
   const signInWithGoogle = useCallback(async () => {
     const sb = getSupabase();
@@ -199,7 +201,27 @@ export function useSession(): SessionState & AuthActions & { needsProfileSetup: 
     }
   }, [state.user]);
 
-  return { ...state, needsProfileSetup, signInWithGoogle, signOut, updateProfile };
+  const refreshMembership = useCallback(async () => {
+    if (!state.user) return;
+    const member = await checkMember(state.user.id);
+    setState(prev => ({ ...prev, member }));
+  }, [state.user, checkMember]);
+
+  const redeemInvite = useCallback(async (code: string): Promise<{ ok: boolean; message: string }> => {
+    const sb = getSupabase();
+    if (!sb) return { ok: false, message: "Supabase not configured." };
+    const trimmed = code.trim();
+    if (!trimmed) return { ok: false, message: "Enter an invite code." };
+    const { data, error } = await sb.rpc("redeem_invite", { p_code: trimmed });
+    if (error) return { ok: false, message: error.message };
+    const row = Array.isArray(data) ? data[0] : data;
+    const ok = !!row?.ok;
+    const message = row?.message ?? (ok ? "Welcome." : "Invite check failed.");
+    if (ok) await refreshMembership();
+    return { ok, message };
+  }, [refreshMembership]);
+
+  return { ...state, needsProfileSetup, signInWithGoogle, signOut, updateProfile, redeemInvite, refreshMembership };
 }
 
 // Subscribe to the full profile list — used for @mention autocomplete and

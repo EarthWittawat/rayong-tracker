@@ -191,14 +191,20 @@ export default function Page() {
     return <LoginGate configured={supaConfigured} onSignIn={session.signInWithGoogle} />;
   }
 
-  if (session.allowed === false) {
-    return <AccessGate email={session.user.email ?? "(unknown email)"} onSignOut={session.signOut} />;
+  if (session.member === false) {
+    return (
+      <AccessGate
+        email={session.user.email ?? "(unknown email)"}
+        onRedeem={session.redeemInvite}
+        onSignOut={session.signOut}
+      />
+    );
   }
 
-  if (!session.profile || session.allowed === null) {
+  if (!session.profile || session.member === null) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted">
-        <span className="text-sm">{session.allowed === null ? "checking access…" : "setting up your profile…"}</span>
+        <span className="text-sm">{session.member === null ? "checking access…" : "setting up your profile…"}</span>
       </div>
     );
   }
@@ -639,7 +645,7 @@ export default function Page() {
       <AccessModal
         open={showAccess}
         onClose={() => setShowAccess(false)}
-        currentEmail={profile.email}
+        currentUserId={profile.id}
       />
     </main>
   );

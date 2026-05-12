@@ -239,78 +239,156 @@ create policy "subtasks delete own"  on public.subtasks for delete using (auth.u
 
 -- ============================================================================
 -- ===== access control =====
--- Email allowlist + RLS gate. Only addresses in `public.allowed_users` can
--- read or write the board state. Anyone with a Google account can still
--- sign in (Supabase Auth doesn't change), but they hit the access-gate
--- screen until an existing member adds their email here.
+-- Invite-code gate. Anyone with a Google account can authenticate, but the
+-- board is hidden behind a member roster. Existing members generate
+-- single-use (or N-use) invite codes; a visitor pastes the code on the
+-- access-pending screen and gets added to `dashboard_members`.
 -- ============================================================================
 
-create table if not exists public.allowed_users (
-  email     text primary key,
-  added_by  uuid references public.profiles(id) on delete set null,
-  added_at  timestamptz not null default now(),
-  note      text
+-- Tear down the old email-allowlist machinery if it was created earlier.
+drop policy if exists "allowed read auth"        on public.allowed_users;
+drop policy if exists "allowed insert allowed"   on public.allowed_users;
+drop policy if exists "allowed delete allowed"   on public.allowed_users;
+drop function if exists public.is_allowed();
+drop table if exists public.allowed_users;
+
+-- Roster of users who have access to the board. Only written via the
+-- redeem_invite RPC (SECURITY DEFINER) so an unprivileged client can't
+-- insert themselves directly.
+create table if not exists public.dashboard_members (
+  user_id     uuid primary key references auth.users(id) on delete cascade,
+  joined_via  uuid,
+  joined_at   timestamptz not null default now(),
+  note        text
 );
 
-alter table public.allowed_users enable row level security;
+create table if not exists public.invite_codes (
+  id          uuid primary key default gen_random_uuid(),
+  code        text unique not null,
+  created_by  uuid references public.profiles(id) on delete set null,
+  created_at  timestamptz not null default now(),
+  expires_at  timestamptz,
+  max_uses    int  not null default 1,
+  uses        int  not null default 0,
+  revoked     bool not null default false,
+  note        text
+);
+create index if not exists idx_invite_codes_creator on public.invite_codes(created_by);
 
--- Helper used by every gated policy below. SECURITY DEFINER so the policy
--- recursion stays bounded (the function itself doesn't re-trigger the
--- allowed_users RLS check while running its query).
-create or replace function public.is_allowed() returns boolean
+alter table public.dashboard_members enable row level security;
+alter table public.invite_codes      enable row level security;
+
+create or replace function public.is_member() returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1
-    from public.allowed_users a
-    where lower(a.email) = lower(coalesce(auth.email(), ''))
-  );
+  select exists (select 1 from public.dashboard_members where user_id = auth.uid());
 $$;
-grant execute on function public.is_allowed() to anon, authenticated;
+grant execute on function public.is_member() to anon, authenticated;
 
-drop policy if exists "allowed read auth"      on public.allowed_users;
-drop policy if exists "allowed insert allowed" on public.allowed_users;
-drop policy if exists "allowed delete allowed" on public.allowed_users;
+-- Single entry point for joining. SECURITY DEFINER so an authenticated but
+-- non-member user can write to dashboard_members + invite_codes (bypassing
+-- their own row-level policies) — but only via the controlled validation
+-- logic below.
+create or replace function public.redeem_invite(p_code text)
+returns table(ok boolean, message text)
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid  uuid := auth.uid();
+  v_code public.invite_codes%rowtype;
+  v_now  timestamptz := now();
+begin
+  if v_uid is null then
+    return query select false, 'Not signed in.'; return;
+  end if;
+  if exists (select 1 from public.dashboard_members where user_id = v_uid) then
+    return query select true, 'Already a member.'; return;
+  end if;
 
--- Any signed-in user can see the allowlist (so the access-gate UI can hint
--- 'you are member #N'). Only existing members can add or revoke.
-create policy "allowed read auth"      on public.allowed_users for select using (auth.uid() is not null);
-create policy "allowed insert allowed" on public.allowed_users for insert with check (public.is_allowed());
-create policy "allowed delete allowed" on public.allowed_users for delete using (public.is_allowed());
+  select * into v_code from public.invite_codes where lower(code) = lower(trim(p_code));
+  if not found then
+    return query select false, 'Invite code not found.'; return;
+  end if;
+  if v_code.revoked then
+    return query select false, 'Invite code revoked.'; return;
+  end if;
+  if v_code.expires_at is not null and v_code.expires_at < v_now then
+    return query select false, 'Invite code expired.'; return;
+  end if;
+  if v_code.uses >= v_code.max_uses then
+    return query select false, 'Invite code already used.'; return;
+  end if;
 
--- ----- replace the open policies on the data tables -------------------------
-drop policy if exists "open read members"  on public.members;
-drop policy if exists "open write members" on public.members;
-drop policy if exists "open read tasks"    on public.tasks;
-drop policy if exists "open write tasks"   on public.tasks;
-drop policy if exists "profiles read all"  on public.profiles;
-drop policy if exists "comments read all"  on public.comments;
-drop policy if exists "subtasks read all"  on public.subtasks;
-drop policy if exists "attachments read all" on public.attachments;
-drop policy if exists "subs read all"      on public.task_subscribers;
+  insert into public.dashboard_members (user_id, joined_via) values (v_uid, v_code.id);
+  update public.invite_codes set uses = uses + 1 where id = v_code.id;
+  return query select true, 'Welcome to the dashboard.';
+end;
+$$;
+grant execute on function public.redeem_invite(text) to authenticated;
 
-create policy "members read allowed"  on public.members for select using (public.is_allowed());
-create policy "members write allowed" on public.members for all
-  using (public.is_allowed()) with check (public.is_allowed());
+-- dashboard_members: any signed-in user can see who has access (cheap
+-- transparency); writes only happen through the RPC above.
+drop policy if exists "members read auth"     on public.dashboard_members;
+drop policy if exists "members no direct ins" on public.dashboard_members;
+drop policy if exists "members no direct upd" on public.dashboard_members;
+drop policy if exists "members no direct del" on public.dashboard_members;
+create policy "members read auth" on public.dashboard_members for select using (auth.uid() is not null);
+-- intentionally no insert/update/delete policies → RPC is the only path.
 
-create policy "tasks read allowed"  on public.tasks for select using (public.is_allowed());
-create policy "tasks write allowed" on public.tasks for all
-  using (public.is_allowed()) with check (public.is_allowed());
+-- invite_codes: existing members can list them; only the creator can
+-- modify or revoke their own; only members can create new codes.
+drop policy if exists "invite read member"   on public.invite_codes;
+drop policy if exists "invite insert member" on public.invite_codes;
+drop policy if exists "invite update owner"  on public.invite_codes;
+drop policy if exists "invite delete owner"  on public.invite_codes;
+create policy "invite read member"   on public.invite_codes for select using (public.is_member());
+create policy "invite insert member" on public.invite_codes for insert with check (public.is_member() and created_by = auth.uid());
+create policy "invite update owner"  on public.invite_codes for update using (public.is_member() and created_by = auth.uid())
+                                                            with check (public.is_member() and created_by = auth.uid());
+create policy "invite delete owner"  on public.invite_codes for delete using (public.is_member() and created_by = auth.uid());
 
--- Profile self-row stays readable so first-time sign-in can ensureProfile.
-create policy "profiles read allowed" on public.profiles
-  for select using (auth.uid() = id or public.is_allowed());
+-- ----- gate the data tables on is_member() ---------------------------------
+drop policy if exists "open read members"     on public.members;
+drop policy if exists "open write members"    on public.members;
+drop policy if exists "members read allowed"  on public.members;
+drop policy if exists "members write allowed" on public.members;
+drop policy if exists "open read tasks"       on public.tasks;
+drop policy if exists "open write tasks"      on public.tasks;
+drop policy if exists "tasks read allowed"    on public.tasks;
+drop policy if exists "tasks write allowed"   on public.tasks;
+drop policy if exists "profiles read all"     on public.profiles;
+drop policy if exists "profiles read allowed" on public.profiles;
+drop policy if exists "comments read all"     on public.comments;
+drop policy if exists "comments read allowed" on public.comments;
+drop policy if exists "subtasks read all"     on public.subtasks;
+drop policy if exists "subtasks read allowed" on public.subtasks;
+drop policy if exists "attachments read all"  on public.attachments;
+drop policy if exists "attachments read allowed" on public.attachments;
+drop policy if exists "subs read all"         on public.task_subscribers;
+drop policy if exists "subs read allowed"     on public.task_subscribers;
 
-create policy "comments read allowed"    on public.comments    for select using (public.is_allowed());
-create policy "subtasks read allowed"    on public.subtasks    for select using (public.is_allowed());
-create policy "attachments read allowed" on public.attachments for select using (public.is_allowed());
-create policy "subs read allowed"        on public.task_subscribers for select using (public.is_allowed());
+create policy "members read member"  on public.members for select using (public.is_member());
+create policy "members write member" on public.members for all using (public.is_member()) with check (public.is_member());
 
--- Bootstrap your own email so the allowlist isn't a dead lock. Run this
--- ONCE in the SQL editor (or edit and re-run the migration) — replace
--- 'YOUR_EMAIL_HERE' with the address you'll sign in with.
+create policy "tasks read member"  on public.tasks for select using (public.is_member());
+create policy "tasks write member" on public.tasks for all using (public.is_member()) with check (public.is_member());
+
+-- Self-profile stays readable so first-time sign-in can ensureProfile + the
+-- access-gate screen can still load the user's own display info.
+create policy "profiles read self_or_member" on public.profiles
+  for select using (auth.uid() = id or public.is_member());
+
+create policy "comments read member"    on public.comments    for select using (public.is_member());
+create policy "subtasks read member"    on public.subtasks    for select using (public.is_member());
+create policy "attachments read member" on public.attachments for select using (public.is_member());
+create policy "subs read member"        on public.task_subscribers for select using (public.is_member());
+
+-- Bootstrap: after signing in once, add yourself to the roster so you can
+-- generate invite codes for everyone else. Run ONCE in the Supabase SQL
+-- editor (replace the email or pass the user_id directly):
 --
---   insert into public.allowed_users (email) values ('YOUR_EMAIL_HERE')
---   on conflict (email) do nothing;
+--   insert into public.dashboard_members (user_id, note)
+--   select id, 'bootstrap admin' from auth.users
+--   where email = 'YOUR_EMAIL_HERE'
+--   on conflict (user_id) do nothing;
 
 -- ===== realtime publication =====
 -- `alter publication add table` has no IF NOT EXISTS, so wrap each addition
