@@ -15,6 +15,10 @@ import { AccessModal } from "@/components/AccessModal";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ClassInsights } from "@/components/ClassInsights";
 import { BoardView } from "@/components/BoardView";
+import { MatrixView } from "@/components/MatrixView";
+import { VelocityChart } from "@/components/VelocityChart";
+import { CommandPalette } from "@/components/CommandPalette";
+import { exportTasksCsv, exportTasksJson } from "@/lib/exporters";
 import { PipelineGuide } from "@/components/PipelineGuide";
 import { computeProgress } from "@/lib/progress";
 import { isLive, STAGES } from "@/lib/supabase";
@@ -48,13 +52,14 @@ export default function Page() {
   const [quadFilter, setQuadFilter] = useState<"all" | "NW" | "NE" | "SW" | "SE" | "ALL">("all");
   const [incompleteOnly, setIncompleteOnly] = useState(false);
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
-  const [view, setView] = useState<"board" | "list">("board");
+  const [view, setView] = useState<"board" | "list" | "matrix">("board");
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Persist the view toggle.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const v = window.localStorage.getItem("rayong-view");
-    if (v === "board" || v === "list") setView(v);
+    if (v === "board" || v === "list" || v === "matrix") setView(v);
   }, []);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -250,6 +255,16 @@ export default function Page() {
               <span className={`w-1.5 h-1.5 rounded-full ${live ? "bg-good" : "bg-warn"} pulse-soft`} />
               {live ? "online" : "offline"}
             </span>
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="hidden md:inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1.5 rounded-md border border-border bg-surface text-muted hover:text-ink hover:bg-surface2 transition-colors"
+              title="Command palette (Ctrl+K)"
+              aria-label="Open command palette"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+              <span className="tabular">search</span>
+              <kbd className="ml-1 text-[9px] tabular px-1 py-0.5 rounded border border-border bg-surface2">Ctrl K</kbd>
+            </button>
             <ThemeToggle />
             <button
               onClick={handleAdd}
@@ -294,6 +309,21 @@ export default function Page() {
                     onClick={handleAdd}
                     className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink md:hidden"
                   >+ add member</button>
+                  <button
+                    onClick={() => { setMenuOpen(false); setPaletteOpen(true); }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink inline-flex items-center justify-between"
+                  >
+                    <span>Command palette</span>
+                    <kbd className="text-[9px] tabular px-1 py-0.5 rounded border border-border bg-surface2 text-muted2">Ctrl K</kbd>
+                  </button>
+                  <button
+                    onClick={() => { setMenuOpen(false); exportTasksCsv(members, tasks); }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink"
+                  >Export CSV</button>
+                  <button
+                    onClick={() => { setMenuOpen(false); exportTasksJson(members, tasks); }}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink"
+                  >Export JSON</button>
                   <button
                     onClick={() => { setMenuOpen(false); session.signOut(); }}
                     className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-crit"
@@ -421,6 +451,16 @@ export default function Page() {
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
                   list
                 </button>
+                <button
+                  onClick={() => setView("matrix")}
+                  role="tab"
+                  aria-selected={view === "matrix"}
+                  className={`text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${view === "matrix" ? "bg-ink text-bg" : "text-muted hover:text-ink"}`}
+                  title="Heatmap matrix"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="6" height="6" rx="1" /><rect x="11" y="3" width="6" height="6" rx="1" /><rect x="3" y="11" width="6" height="6" rx="1" /><rect x="11" y="11" width="6" height="6" rx="1" /></svg>
+                  matrix
+                </button>
               </div>
               <label className="inline-flex items-center gap-2 text-[11px] text-muted2">
                 sort
@@ -476,6 +516,14 @@ export default function Page() {
               editing={editing}
               profile={profile}
               onPatchTask={updateTask}
+              onFocusMember={(id) => { setView("list"); setFocusId(id); setAllExpanded(true); setTimeout(() => { document.getElementById(`member-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); }}
+            />
+          )}
+
+          {filteredMembers.length > 0 && view === "matrix" && (
+            <MatrixView
+              members={filteredMembers}
+              tasks={tasks}
               onFocusMember={(id) => { setView("list"); setFocusId(id); setAllExpanded(true); setTimeout(() => { document.getElementById(`member-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); }}
             />
           )}
@@ -543,6 +591,8 @@ export default function Page() {
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: "rotate(180deg)" }}><polyline points="6 9 12 15 18 9" /></svg>
             </a>
           </header>
+
+          <VelocityChart tasks={tasks} days={14} />
 
           <PipelineGuide tasks={tasks} />
 
@@ -646,6 +696,37 @@ export default function Page() {
         open={showAccess}
         onClose={() => setShowAccess(false)}
         currentUserId={profile.id}
+      />
+
+      <CommandPalette
+        open={paletteOpen}
+        setOpen={setPaletteOpen}
+        members={members}
+        tasks={tasks}
+        view={view}
+        setView={setView}
+        onFocusMember={(id) => {
+          setView("list");
+          setFocusId(id);
+          setAllExpanded(true);
+          setTimeout(() => {
+            document.getElementById(`member-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 50);
+        }}
+        onAddMember={handleAdd}
+        onSignOut={session.signOut}
+        onEditProfile={() => setShowIdentity(true)}
+        onManageAccess={() => setShowAccess(true)}
+        onToggleTheme={() => {
+          if (typeof document === "undefined") return;
+          const root = document.documentElement;
+          const isDark = root.classList.contains("dark");
+          const next = isDark ? "light" : "dark";
+          root.classList.toggle("dark", next === "dark");
+          try { window.localStorage.setItem("rayong-theme", next); } catch {}
+        }}
+        onExportCsv={() => exportTasksCsv(members, tasks)}
+        onExportJson={() => exportTasksJson(members, tasks)}
       />
     </main>
   );

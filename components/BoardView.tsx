@@ -66,6 +66,7 @@ export function BoardView({
           return (
             <div
               key={s.key}
+              data-stage={s.key}
               className="snap-start w-[22rem] shrink-0 rounded-xl border border-border bg-surface2/30 flex flex-col"
             >
               <div className="px-3 pt-3 pb-2 border-b border-border">
