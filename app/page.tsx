@@ -14,8 +14,9 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { ClassInsights } from "@/components/ClassInsights";
 import { BoardView } from "@/components/BoardView";
 import { computeProgress } from "@/lib/progress";
-import { isLive } from "@/lib/supabase";
-import type { Member } from "@/lib/supabase";
+import { isLive, STAGES } from "@/lib/supabase";
+import type { Member, StageKey } from "@/lib/supabase";
+import { formatRelative } from "@/lib/relativeTime";
 
 const PALETTE = ["#C96442", "#3F6E97", "#3F7D58", "#B68A2E", "#7B5BA6", "#9B5C7A", "#4F7A95", "#7C7A52"];
 const EMOJI   = ["🌾", "🛰️", "🌱", "🌳", "✨", "🌻", "🍃", "🌿"];
@@ -90,6 +91,67 @@ export default function Page() {
       return true;
     });
   }, [sortedMembers, query, quadFilter, incompleteOnly]);
+
+  // Live footer telemetry — derived only from current tasks + members so it
+  // updates every realtime patch without any extra wiring.
+  const footerStats = useMemo(() => {
+    const now = Date.now();
+    const DAY = 86_400_000;
+    const WEEK = DAY * 7;
+
+    let updated24h = 0;
+    let updated7d = 0;
+    const activeIds24h = new Set<string>();
+    let doneCount = 0, todoCount = 0, inProgressCount = 0;
+    let lastEdit = 0;
+    const stageAgg = new Map<StageKey, { done: number; total: number }>();
+    for (const s of STAGES) stageAgg.set(s.key, { done: 0, total: 0 });
+    const updates24hByMember = new Map<string, number>();
+
+    for (const t of tasks) {
+      const ts = t.updated_at ? Date.parse(t.updated_at) : 0;
+      if (ts > lastEdit) lastEdit = ts;
+      if (ts > 0 && now - ts < DAY) {
+        updated24h++;
+        activeIds24h.add(t.member_id);
+        updates24hByMember.set(t.member_id, (updates24hByMember.get(t.member_id) ?? 0) + 1);
+      }
+      if (ts > 0 && now - ts < WEEK) updated7d++;
+      if (t.total <= 0 || t.done <= 0) todoCount++;
+      else if (t.done >= t.total) doneCount++;
+      else inProgressCount++;
+      const a = stageAgg.get(t.stage); if (a) { a.done += t.done; a.total += t.total; }
+    }
+
+    let lagging: { key: StageKey; pct: number } | null = null;
+    let leading: { key: StageKey; pct: number } | null = null;
+    for (const [key, v] of stageAgg) {
+      const pct = v.total > 0 ? (v.done / v.total) * 100 : 0;
+      if (!lagging || pct < lagging.pct) lagging = { key, pct };
+      if (!leading || pct > leading.pct) leading = { key, pct };
+    }
+
+    let topMemberId: string | null = null; let topMemberCount = 0;
+    for (const [id, c] of updates24hByMember) {
+      if (c > topMemberCount) { topMemberCount = c; topMemberId = id; }
+    }
+    const topMember = topMemberId ? members.find(m => m.id === topMemberId) ?? null : null;
+
+    const totalTasks = tasks.length;
+    const donePct = totalTasks > 0 ? (doneCount / totalTasks) * 100 : 0;
+
+    return {
+      updated24h,
+      updated7d,
+      activeMembers24h: activeIds24h.size,
+      doneCount, todoCount, inProgressCount, totalTasks, donePct,
+      lastEdit: lastEdit || null,
+      lagging, leading,
+      topMember, topMemberCount,
+    };
+  }, [tasks, members]);
+
+  const stageLabel = (k: StageKey | undefined) => STAGES.find(s => s.key === k)?.short ?? "—";
 
   function handleAdd() {
     const id = `m_${Math.random().toString(36).slice(2, 8)}`;
@@ -417,26 +479,51 @@ export default function Page() {
 
       <footer className="nasa-nav mt-12">
         <div className="h-[3px] w-full bg-[rgb(var(--c-accent))]" />
-        <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-          <div>
-            <div className="eyebrow text-[10px] nav-muted mb-1">About</div>
-            <div className="nav-ink font-semibold">Rayong Crop Tracker</div>
-            <p className="nav-muted mt-1 leading-relaxed">
-              Real-time team board for the Sentinel-2 crop-mapping pipeline. Edits sync via Supabase.
-            </p>
+        <div className="max-w-7xl mx-auto px-6 py-6">
+          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+            <div>
+              <div className="eyebrow text-[10px] nav-muted">Team telemetry</div>
+              <div className="text-xs nav-muted">live · derived from current board state</div>
+            </div>
+            <div className="text-[10px] eyebrow tabular nav-muted">
+              {footerStats.lastEdit ? `last edit ${formatRelative(footerStats.lastEdit)}` : "no edits yet"}
+            </div>
           </div>
-          <div>
-            <div className="eyebrow text-[10px] nav-muted mb-1">Pipeline</div>
-            <div className="nav-ink tabular">Sentinel-2 L2A → SR ×4 → GenAI → Features → RF</div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-[rgb(var(--c-nav-border))] rounded-md overflow-hidden">
+            <FootStat label="Online now" value={presence.length} sub={presence.length === 1 ? "teammate" : "teammates"} tone="info" />
+            <FootStat label="Edits · 24h" value={footerStats.updated24h} sub={`${footerStats.activeMembers24h} active`} tone="accent" />
+            <FootStat label="Edits · 7d" value={footerStats.updated7d} sub="rolling window" />
+            <FootStat
+              label="Cards done"
+              value={`${footerStats.doneCount}/${footerStats.totalTasks}`}
+              sub={`${footerStats.donePct.toFixed(0)}% complete`}
+              tone="good"
+            />
+            <FootStat
+              label="Top contributor"
+              value={footerStats.topMember ? `${footerStats.topMember.emoji} ${footerStats.topMember.name}` : "—"}
+              sub={footerStats.topMember ? `${footerStats.topMemberCount} edits · 24h` : "no edits yet"}
+            />
+            <FootStat
+              label="Lagging stage"
+              value={footerStats.lagging ? `${stageLabel(footerStats.lagging.key)} · ${footerStats.lagging.pct.toFixed(0)}%` : "—"}
+              sub={footerStats.leading ? `lead: ${stageLabel(footerStats.leading.key)} · ${footerStats.leading.pct.toFixed(0)}%` : ""}
+              tone="warn"
+            />
           </div>
-          <div>
-            <div className="eyebrow text-[10px] nav-muted mb-1">Data sources</div>
-            <ul className="nav-muted space-y-0.5">
-              <li>CDSE OpenEO (Sentinel-2)</li>
-              <li>LDD landuse shapefile</li>
-              <li>Esri / Maxar imagery</li>
-              <li>OpenSR · DiffusionSat (SR + GenAI)</li>
-            </ul>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] eyebrow nav-muted tabular">
+            <span>Sentinel-2 L2A</span>
+            <span className="w-1 h-1 rounded-full bg-white/30" />
+            <span>CDSE OpenEO</span>
+            <span className="w-1 h-1 rounded-full bg-white/30" />
+            <span>LDD landuse</span>
+            <span className="w-1 h-1 rounded-full bg-white/30" />
+            <span>OpenSR · DiffusionSat</span>
+            <span className="w-1 h-1 rounded-full bg-white/30" />
+            <span>Esri · Maxar imagery</span>
+            <span className="ml-auto">edits sync via Supabase</span>
           </div>
         </div>
       </footer>
@@ -469,5 +556,27 @@ export default function Page() {
         }}
       />
     </main>
+  );
+}
+
+function FootStat({
+  label, value, sub, tone,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  tone?: "info" | "accent" | "good" | "warn";
+}) {
+  const accent =
+    tone === "info"   ? "rgb(var(--c-info))" :
+    tone === "accent" ? "rgb(var(--c-accent))" :
+    tone === "good"   ? "rgb(var(--c-good))" :
+    tone === "warn"   ? "rgb(var(--c-warn))" : "rgb(var(--c-nav-ink))";
+  return (
+    <div className="bg-[rgb(var(--c-nav-bg))] px-4 py-3 flex flex-col gap-0.5">
+      <div className="eyebrow text-[9px] nav-muted">{label}</div>
+      <div className="text-base font-semibold tabular truncate" style={{ color: accent }} title={String(value)}>{value}</div>
+      {sub && <div className="text-[10px] nav-muted tabular truncate" title={sub}>{sub}</div>}
+    </div>
   );
 }
