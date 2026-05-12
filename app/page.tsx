@@ -216,12 +216,12 @@ export default function Page() {
               style={{ background: "linear-gradient(135deg, rgb(var(--c-info)) 0%, rgb(var(--c-accent)) 100%)" }}
               title="Mission patch"
             >
-              <span className="text-[9px] sm:text-[10px] font-bold tracking-wider text-white">RYG</span>
+              <span className="text-[9px] sm:text-[10px] font-bold tracking-wider text-white">SC</span>
               <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[rgb(var(--c-accent))] ring-2 ring-[rgb(var(--c-nav-bg))]" />
             </div>
             <div className="min-w-0 leading-tight">
               <div className="hidden sm:block eyebrow text-[10px] nav-muted truncate">Sentinel-2 · Rayong AOI</div>
-              <h1 className="text-sm sm:text-base font-bold nav-ink truncate">Rayong Crop Tracker</h1>
+              <h1 className="text-sm sm:text-base font-bold nav-ink truncate">SynthCrop Progress Tracker</h1>
             </div>
           </div>
 

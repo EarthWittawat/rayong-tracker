@@ -4,7 +4,7 @@ import "leaflet-draw/dist/leaflet.draw.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Rayong Crop Tracker",
+  title: "SynthCrop Progress Tracker",
   description: "Team progress for Sentinel-2 → SR → GenAI → Features → RF",
 };
 

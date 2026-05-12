@@ -47,13 +47,13 @@ export function LoginGate({
             className="relative w-16 h-16 rounded-full flex items-center justify-center ring-2 ring-white/85"
             style={{ background: "linear-gradient(135deg, rgb(var(--c-info)) 0%, rgb(var(--c-accent)) 100%)" }}
           >
-            <span className="text-sm font-bold tracking-widest text-white">RYG</span>
+            <span className="text-sm font-bold tracking-widest text-white">SC</span>
           </div>
           {/* tiny orbital pulse dot */}
           <span className="absolute top-1 right-3 w-1.5 h-1.5 rounded-full bg-white/80 pulse-soft" />
         </div>
 
-        <h1 className="text-3xl font-bold text-white">Rayong Crop Tracker</h1>
+        <h1 className="text-3xl font-bold text-white">SynthCrop Progress Tracker</h1>
         <p className="text-sm text-white/70 mt-2 mb-8 max-w-sm mx-auto">
           Real-time team board for the Sentinel-2 crop-mapping pipeline. Sign in with Google to join the board.
         </p>
