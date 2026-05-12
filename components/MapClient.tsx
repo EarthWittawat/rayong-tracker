@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MapContainer, TileLayer, Polygon, Polyline, Rectangle, CircleMarker, Tooltip, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Polygon, Polyline, CircleMarker, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet-draw";
 import { forward as mgrsForward } from "mgrs";
@@ -26,15 +26,73 @@ function quadCenter(q: QuadKey): LL {
   return [lat, lng];
 }
 
-function quadBounds(q: QuadKey): [LL, LL] {
+function quadBounds(q: QuadKey): { south: number; west: number; north: number; east: number } {
   const { minLng, maxLng, minLat, maxLat } = RAYONG_BBOX;
   const cLng = RAYONG_CENTER.lng;
   const cLat = RAYONG_CENTER.lat;
-  const west = q.includes("W") ? minLng : cLng;
-  const east = q.includes("W") ? cLng : maxLng;
-  const south = q.startsWith("N") ? cLat : minLat;
-  const north = q.startsWith("N") ? maxLat : cLat;
-  return [[south, west], [north, east]];
+  return {
+    south: q.startsWith("N") ? cLat : minLat,
+    west:  q.includes("W")    ? minLng : cLng,
+    north: q.startsWith("N") ? maxLat : cLat,
+    east:  q.includes("W")    ? cLng : maxLng,
+  };
+}
+
+// Sutherland-Hodgman against a single axis-aligned half-plane.
+function clipHalfPlane(
+  poly: LL[],
+  inside: (p: LL) => boolean,
+  intersect: (a: LL, b: LL) => LL,
+): LL[] {
+  if (poly.length === 0) return poly;
+  const out: LL[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const P = poly[i];
+    const Q = poly[(i + 1) % poly.length];
+    const inP = inside(P);
+    const inQ = inside(Q);
+    if (inP) {
+      out.push(P);
+      if (!inQ) out.push(intersect(P, Q));
+    } else if (inQ) {
+      out.push(intersect(P, Q));
+    }
+  }
+  return out;
+}
+
+// Clip a province-outline polygon (LL = [lat, lng]) to a quadrant's
+// axis-aligned bbox, four half-planes in turn. Returns a polygon that
+// follows the province coast where it does + uses the quadrant dividing
+// lines where it doesn't — so the hover region matches the visible land.
+function clipPolyToQuad(poly: LL[], q: QuadKey): LL[] {
+  const { south, west, north, east } = quadBounds(q);
+  let p = poly.slice();
+  p = clipHalfPlane(p,
+    ([lat]) => lat >= south,
+    (a, b) => {
+      const t = (south - a[0]) / (b[0] - a[0] || 1e-12);
+      return [south, a[1] + t * (b[1] - a[1])] as LL;
+    });
+  p = clipHalfPlane(p,
+    ([lat]) => lat <= north,
+    (a, b) => {
+      const t = (north - a[0]) / (b[0] - a[0] || 1e-12);
+      return [north, a[1] + t * (b[1] - a[1])] as LL;
+    });
+  p = clipHalfPlane(p,
+    ([, lng]) => lng >= west,
+    (a, b) => {
+      const t = (west - a[1]) / (b[1] - a[1] || 1e-12);
+      return [a[0] + t * (b[0] - a[0]), west] as LL;
+    });
+  p = clipHalfPlane(p,
+    ([, lng]) => lng <= east,
+    (a, b) => {
+      const t = (east - a[1]) / (b[1] - a[1] || 1e-12);
+      return [a[0] + t * (b[0] - a[0]), east] as LL;
+    });
+  return p;
 }
 
 // Spread N member markers in a ring around the quadrant center so two
@@ -158,6 +216,17 @@ export function MapClient({
     () => RAYONG_OUTLINE.geometry.coordinates[0].map(([lng, lat]) => [lat, lng] as LL),
     []
   );
+
+  // Province outline clipped per quadrant. The hover-insight regions then
+  // follow the coast where the province does + use the quadrant dividing
+  // lines where it doesn't, so the cursor isn't catching ocean tiles.
+  const clippedByQuad = useMemo(() => {
+    const out: Record<QuadKey, LL[]> = { NW: [], NE: [], SW: [], SE: [] };
+    for (const q of QUADRANTS) {
+      out[q.key as QuadKey] = clipPolyToQuad(outlineLatLng, q.key as QuadKey);
+    }
+    return out;
+  }, [outlineLatLng]);
 
   const [click, setClick] = useState<{ lat: number; lng: number } | null>(null);
   const [bbox, setBbox] = useState<Bbox | null>(null);
@@ -325,18 +394,19 @@ export function MapClient({
           </>
         )}
 
-        {/* Per-quadrant rectangles. Used for class-shares fill AND hover
-            insights — both layers depend on them, but we only render
-            interactive rectangles when at least one is enabled. */}
+        {/* Per-quadrant polygons clipped to the province outline. Used for
+            class-shares fill AND hover insights — both layers depend on
+            them, but interaction is wired only when hoverInsights is on. */}
         {(layers.classFill || layers.hoverInsights) && QUADRANTS.map(q => {
-          const bounds = quadBounds(q.key as QuadKey);
+          const positions = clippedByQuad[q.key as QuadKey];
+          if (!positions || positions.length < 3) return null;
           const area = areaByKey.get(q.key);
           const fillColor = layers.classFill && area ? giniColor(area.metrics.gini) : "#000";
           const fillOpacity = layers.classFill && area ? 0.18 : (hoverQuad === q.key ? 0.10 : 0);
           return (
-            <Rectangle
-              key={`qrect-${q.key}`}
-              bounds={bounds}
+            <Polygon
+              key={`qpoly-${q.key}`}
+              positions={positions}
               pathOptions={{
                 color: hoverQuad === q.key ? "#F5C842" : "#F5F1E8",
                 weight: hoverQuad === q.key ? 2 : 1,
