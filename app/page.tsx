@@ -495,7 +495,18 @@ export default function Page() {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-[rgb(var(--c-nav-border))] rounded-md overflow-hidden">
-            <FootStat label="Online now" value={presence.length} sub={presence.length === 1 ? "teammate" : "teammates"} tone="info" />
+            {(() => {
+              const selfHere = presence.some(p => p.id === profile.id);
+              const total = presence.length;
+              const others = selfHere ? total - 1 : total;
+              const names = presence.map(p => p.id === profile.id ? `${p.name} (you)` : p.name).join(", ") || "no one";
+              const sub =
+                total === 0 ? "no one online"
+                : selfHere && others === 0 ? "just you"
+                : selfHere ? `you + ${others} other${others === 1 ? "" : "s"}`
+                : `${total} other${total === 1 ? "" : "s"}`;
+              return <FootStat label="Online now" value={total} sub={sub} tone="info" title={names} />;
+            })()}
             <FootStat label="Edits · 24h" value={footerStats.updated24h} sub={`${footerStats.activeMembers24h} active`} tone="accent" />
             <FootStat label="Edits · 7d" value={footerStats.updated7d} sub="rolling window" />
             <FootStat
@@ -564,12 +575,13 @@ export default function Page() {
 }
 
 function FootStat({
-  label, value, sub, tone,
+  label, value, sub, tone, title,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   tone?: "info" | "accent" | "good" | "warn";
+  title?: string;
 }) {
   const accent =
     tone === "info"   ? "rgb(var(--c-info))" :
@@ -577,9 +589,9 @@ function FootStat({
     tone === "good"   ? "rgb(var(--c-good))" :
     tone === "warn"   ? "rgb(var(--c-warn))" : "rgb(var(--c-nav-ink))";
   return (
-    <div className="bg-[rgb(var(--c-nav-bg))] px-4 py-3 flex flex-col gap-0.5">
+    <div className="bg-[rgb(var(--c-nav-bg))] px-4 py-3 flex flex-col gap-0.5" title={title}>
       <div className="eyebrow text-[9px] nav-muted">{label}</div>
-      <div className="text-base font-semibold tabular truncate" style={{ color: accent }} title={String(value)}>{value}</div>
+      <div className="text-base font-semibold tabular truncate" style={{ color: accent }} title={title ?? String(value)}>{value}</div>
       {sub && <div className="text-[10px] nav-muted tabular truncate" title={sub}>{sub}</div>}
     </div>
   );
