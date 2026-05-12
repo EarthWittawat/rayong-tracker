@@ -29,5 +29,5 @@ data/admin_ryg/
 # Supabase CLI scratch
 supabase/.temp/
 
-# local Claude settings
-.claude/settings.local.json
+# Claude Code project settings — purely local, don't ship to teammates
+.claude/
