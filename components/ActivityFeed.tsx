@@ -53,7 +53,7 @@ export function ActivityFeed({ events }: { events: ActivityEvent[] }) {
   const recentFlash = recent && now - recent.ts < 4000;
 
   return (
-    <div className="fixed bottom-4 right-4 z-20 max-w-xs w-[20rem]">
+    <div className="fixed bottom-4 right-4 z-[1200] max-w-xs w-[20rem]">
       {open ? (
         <div className="bg-surface border border-border rounded-xl2 shadow-cardHover overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-surface2/50">

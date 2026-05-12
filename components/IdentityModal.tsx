@@ -61,7 +61,7 @@ export function IdentityModal({
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[1300] flex items-center justify-center bg-ink/40 backdrop-blur-sm p-4"
       onClick={firstTime ? undefined : onClose}
     >
       <div className="bg-surface rounded-xl2 shadow-cardHover border border-border w-full max-w-sm p-5"

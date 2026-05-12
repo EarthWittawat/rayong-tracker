@@ -96,6 +96,8 @@ input[type="number"] { -moz-appearance: textfield; }
 .leaflet-container {
   background: rgb(var(--c-surface2));
   font-family: inherit;
+  /* Establish own stacking context so the z-1000 control panes stay inside the map div. */
+  z-index: 0;
 }
 .leaflet-control-attribution {
   background: rgb(var(--c-surface) / 0.85) !important;
@@ -120,7 +122,16 @@ input[type="number"] { -moz-appearance: textfield; }
 
 /* dark mode: invert leaflet tile filter for any non-satellite raster (none currently, but keeps option) */
 
-/* draw control styling */
+/* draw control styling + sprite path overrides (Next bundler doesn't resolve url() from node_modules CSS reliably) */
 .leaflet-draw-toolbar a {
   background-color: rgb(var(--c-surface)) !important;
+  background-image: url('/leaflet-draw/images/spritesheet.png') !important;
+  background-image: linear-gradient(transparent, transparent), url('/leaflet-draw/images/spritesheet.svg') !important;
+  background-repeat: no-repeat !important;
+  background-size: 300px 30px !important;
+  background-clip: padding-box !important;
+}
+.leaflet-retina .leaflet-draw-toolbar a {
+  background-image: url('/leaflet-draw/images/spritesheet-2x.png') !important;
+  background-image: linear-gradient(transparent, transparent), url('/leaflet-draw/images/spritesheet.svg') !important;
 }

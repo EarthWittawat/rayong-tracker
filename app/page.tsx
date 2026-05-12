@@ -68,7 +68,6 @@ export default function Page() {
     }
   }
 
-  // 1. Auth still loading — splash.
   if (session.loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted">
@@ -77,12 +76,10 @@ export default function Page() {
     );
   }
 
-  // 2. Force login gate when Supabase configured (per design choice — no demo mode).
   if (!session.user) {
     return <LoginGate configured={supaConfigured} onSignIn={session.signInWithGoogle} />;
   }
 
-  // 3. Profile not yet available — likely a transient race; show splash.
   if (!session.profile) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted">
@@ -91,7 +88,6 @@ export default function Page() {
     );
   }
 
-  // 4. Data not ready — splash.
   if (!ready) {
     return (
       <div className="min-h-screen flex items-center justify-center text-muted">
@@ -104,13 +100,22 @@ export default function Page() {
 
   return (
     <main className="min-h-screen pb-24">
-      <header className="border-b border-border bg-bg/80 backdrop-blur-md sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-base font-semibold text-ink truncate">Rayong Crop Tracker</h1>
-            <p className="text-xs text-muted">Data · SR · GenAI · Features · RF</p>
+      <header className="sticky top-0 z-[1100] border-b border-border bg-bg/85 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
+          <div className="min-w-0 flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-xl shrink-0"
+              style={{ background: "rgb(var(--c-accent) / 0.12)" }}
+            >
+              🌾
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold text-ink truncate leading-tight">Rayong Crop Tracker</h1>
+              <p className="text-[11px] text-muted2 tabular truncate">Data · SR · GenAI · Features · RF</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+
+          <div className="flex items-center gap-2 shrink-0">
             {live && (
               <PresenceBar
                 users={presence}
@@ -118,20 +123,24 @@ export default function Page() {
                 onEditMe={() => setShowIdentity(true)}
               />
             )}
-            <ThemeToggle />
-            <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${live ? "border-good/30 text-good bg-good/5" : "border-warn/30 text-warn bg-warn/5"}`}>
+            <span className={`hidden sm:inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border tabular ${live ? "border-good/30 text-good bg-good/5" : "border-warn/30 text-warn bg-warn/5"}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${live ? "bg-good" : "bg-warn"} pulse-soft`} />
-              {live ? "live · synced" : "offline"}
+              {live ? "live" : "offline"}
             </span>
-            <button onClick={handleAdd}
-                    className="text-xs px-3 py-1.5 rounded-md bg-ink text-bg hover:bg-ink/90 transition-colors">
-              + add member
+            <ThemeToggle />
+            <button
+              onClick={handleAdd}
+              className="hidden md:inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-md bg-ink text-bg hover:opacity-90 transition-opacity font-medium"
+              title="Add a manual member"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              <span>add member</span>
             </button>
             <div className="relative">
               <button
                 onClick={() => setMenuOpen(o => !o)}
                 onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
-                className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-sm border"
+                className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-sm border-2"
                 style={{ background: `${profile.color}1A`, color: profile.color, borderColor: profile.color }}
                 title={`Signed in as ${profile.name}`}
               >
@@ -143,7 +152,7 @@ export default function Page() {
               </button>
               {menuOpen && (
                 <div
-                  className="absolute right-0 mt-1 w-48 bg-surface border border-border rounded-md shadow-cardHover py-1 z-20"
+                  className="absolute right-0 mt-1.5 w-52 bg-surface border border-border rounded-lg shadow-cardHover py-1 z-[1200]"
                   onMouseDown={(e) => e.preventDefault()}
                 >
                   <div className="px-3 py-2 border-b border-border">
@@ -152,11 +161,15 @@ export default function Page() {
                   </div>
                   <button
                     onClick={() => { setShowIdentity(true); setMenuOpen(false); }}
-                    className="w-full text-left text-xs px-3 py-1.5 hover:bg-surface2"
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink"
                   >Edit profile</button>
                   <button
+                    onClick={handleAdd}
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink md:hidden"
+                  >+ add member</button>
+                  <button
                     onClick={() => { setMenuOpen(false); session.signOut(); }}
-                    className="w-full text-left text-xs px-3 py-1.5 hover:bg-surface2 text-crit"
+                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-crit"
                   >Sign out</button>
                 </div>
               )}
@@ -165,35 +178,45 @@ export default function Page() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-5 py-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 
         <OverviewStrip members={members} tasks={tasks} />
 
         <section className="rounded-xl2 bg-surface border border-border shadow-card overflow-hidden">
-          <div className="p-5 pb-2 flex items-center justify-between gap-3 flex-wrap">
+          <div className="px-6 pt-5 pb-3 flex items-start justify-between gap-3 flex-wrap border-b border-border">
             <div>
-              <div className="text-xs uppercase tracking-wider text-muted2">Rayong province · quadrant split</div>
-              <p className="text-sm text-muted mt-0.5">Fill darkness reflects each member's progress. Click a quadrant to focus.</p>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-muted2 font-medium">Province map</div>
+              <h2 className="text-lg font-semibold text-ink mt-0.5">Rayong · Sentinel-2 AOI</h2>
+              <p className="text-xs text-muted mt-1 max-w-xl">
+                Satellite imagery. Click anywhere to read lat/lng + MGRS for the notebook. Draw a rectangle to export a bounding box.
+              </p>
             </div>
             {focusId && (
-              <button onClick={() => setFocusId(null)} className="text-xs text-muted hover:text-ink underline-offset-2 hover:underline">clear focus</button>
+              <button onClick={() => setFocusId(null)} className="text-xs text-muted hover:text-ink px-2 py-1 rounded border border-border hover:bg-surface2 transition-colors">
+                clear focus
+              </button>
             )}
           </div>
-          <div className="p-5 pt-1">
+          <div className="p-5">
             <RayongMap members={members} tasks={tasks} focusId={focusId} onFocus={setFocusId} />
           </div>
         </section>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h2 className="text-sm font-semibold text-ink">Members</h2>
-            <div className="flex items-center gap-3 text-xs text-muted2">
-              <label className="inline-flex items-center gap-1.5">
+        <section className="space-y-4">
+          <div className="flex items-end justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-muted2 font-medium">Team</div>
+              <h2 className="text-lg font-semibold text-ink mt-0.5">
+                Members <span className="text-muted2 font-normal tabular text-sm">· {members.length}</span>
+              </h2>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <label className="inline-flex items-center gap-2 text-muted2">
                 sort
                 <select
                   value={sortMode}
                   onChange={(e) => setSortMode(e.target.value as SortMode)}
-                  className="bg-surface2 border border-border rounded px-1.5 py-0.5 text-ink outline-none"
+                  className="bg-surface border border-border rounded-md px-2 py-1 text-ink outline-none hover:bg-surface2 cursor-pointer"
                 >
                   <option value="default">default</option>
                   <option value="progress-desc">progress · high→low</option>
@@ -201,10 +224,12 @@ export default function Page() {
                   <option value="name">name (A→Z)</option>
                 </select>
               </label>
-              <span className="hidden sm:inline">card focus + / − to bump · shift ×5 · n for note</span>
+              <span className="hidden lg:inline text-muted2">
+                <kbd className="px-1 py-0.5 rounded bg-surface2 border border-border tabular text-[10px]">+/−</kbd> bump · <kbd className="px-1 py-0.5 rounded bg-surface2 border border-border tabular text-[10px]">⇧</kbd> ×5 · <kbd className="px-1 py-0.5 rounded bg-surface2 border border-border tabular text-[10px]">c</kbd> comments
+              </span>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {sortedMembers.map(m => (
               <MemberCard
                 key={m.id}
@@ -222,20 +247,28 @@ export default function Page() {
               />
             ))}
             {sortedMembers.length === 0 && (
-              <div className="col-span-full text-center py-8 text-muted2 text-sm">
-                No members yet. Click <span className="text-ink font-medium">+ add member</span> to start.
+              <div className="col-span-full text-center py-12 rounded-xl2 border-2 border-dashed border-border">
+                <div className="text-3xl mb-2">🌱</div>
+                <div className="text-sm text-ink font-medium">No members yet</div>
+                <div className="text-xs text-muted2 mt-1 mb-4">Members are added automatically when teammates sign in.</div>
+                <button
+                  onClick={handleAdd}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-ink text-bg hover:opacity-90 transition-opacity"
+                >+ add manual member</button>
               </div>
             )}
           </div>
         </section>
 
-        <footer className="text-xs text-muted2 pt-2">
-          <span>Edits sync in real-time across all signed-in members via Supabase.</span>
+        <footer className="text-xs text-muted2 pt-4 border-t border-border flex flex-wrap items-center gap-2">
+          <span>Edits sync in real-time via Supabase.</span>
+          <span className="text-border2">·</span>
+          <span>Imagery © Esri, Maxar, Earthstar Geographics</span>
         </footer>
       </div>
 
       {undo && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20 bg-ink text-bg text-sm px-4 py-2.5 rounded-lg shadow-cardHover flex items-center gap-3">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1300] bg-ink text-bg text-sm px-4 py-2.5 rounded-lg shadow-cardHover flex items-center gap-3">
           <span>Removed <strong>{undo.name}</strong>.</span>
           <button
             onClick={async () => { const r = undo.restore; setUndo(null); await r(); }}

@@ -205,17 +205,17 @@ export function MapClient({
 
           <Polygon
             positions={outlineLatLng}
-            pathOptions={{ color: "#F5F1E8", weight: 2, fillOpacity: 0.0, opacity: 0.9 }}
+            pathOptions={{ color: "#F5F1E8", weight: 2, fillOpacity: 0.0, opacity: 0.9, interactive: false }}
           />
 
           {/* quadrant divider lines anchored at province centroid */}
           <Polyline
             positions={[[RAYONG_BBOX.maxLat, RAYONG_CENTER.lng], [RAYONG_BBOX.minLat, RAYONG_CENTER.lng]]}
-            pathOptions={{ color: "#F5F1E8", weight: 1, dashArray: "4 6", opacity: 0.55 }}
+            pathOptions={{ color: "#F5F1E8", weight: 1, dashArray: "4 6", opacity: 0.55, interactive: false }}
           />
           <Polyline
             positions={[[RAYONG_CENTER.lat, RAYONG_BBOX.minLng], [RAYONG_CENTER.lat, RAYONG_BBOX.maxLng]]}
-            pathOptions={{ color: "#F5F1E8", weight: 1, dashArray: "4 6", opacity: 0.55 }}
+            pathOptions={{ color: "#F5F1E8", weight: 1, dashArray: "4 6", opacity: 0.55, interactive: false }}
           />
 
           {/* quadrant member chips */}
@@ -249,7 +249,7 @@ export function MapClient({
 
           {/* Sentinel-2 100km MGRS tile labels (only on toggle) */}
           {showS2 && s2Tiles.map(t => (
-            <CircleMarker key={t.id} center={[t.lat, t.lng]} radius={4} pathOptions={{ color: "#F5C842", fillColor: "#F5C842", fillOpacity: 0.9, weight: 1 }}>
+            <CircleMarker key={t.id} center={[t.lat, t.lng]} radius={4} pathOptions={{ color: "#F5C842", fillColor: "#F5C842", fillOpacity: 0.9, weight: 1, interactive: false }}>
               <Tooltip permanent direction="center" opacity={0.95}>
                 <span className="text-[10px] font-semibold tabular text-ink">{t.id}</span>
               </Tooltip>
@@ -258,7 +258,11 @@ export function MapClient({
 
           {/* clicked point marker */}
           {click && (
-            <CircleMarker center={[click.lat, click.lng]} radius={6} pathOptions={{ color: "#C96442", fillColor: "#C96442", fillOpacity: 0.9, weight: 2 }} />
+            <CircleMarker
+              center={[click.lat, click.lng]}
+              radius={8}
+              pathOptions={{ color: "#FFFFFF", fillColor: "#C96442", fillOpacity: 1, weight: 3, interactive: false }}
+            />
           )}
 
           <ClickHandler onClick={(lat, lng) => setClick({ lat, lng })} />
