@@ -9,7 +9,12 @@
       "Bash(npx next *)",
       "Bash(python *)",
       "Bash(pip install *)",
-      "Bash(PYTHONIOENCODING=utf-8 python *)"
+      "Bash(PYTHONIOENCODING=utf-8 python *)",
+      "PowerShell($bytes = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create\\(\\).GetBytes\\($bytes\\); [Convert]::ToBase64String\\($bytes\\))",
+      "PowerShell(supabase *)",
+      "Bash(npm install *)",
+      "Bash(grep -qE \"Compiled successfully|Failed|error|Error\" \"C:\\\\\\\\Users\\\\\\\\wttwk\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\D--Github-rayong-tracker\\\\\\\\b31e7ee5-da3a-4697-a5e9-4a4f30e9f07a\\\\\\\\tasks\\\\\\\\b51ezaexi.output\")",
+      "Bash(tail -50 \"C:\\\\\\\\Users\\\\\\\\wttwk\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\D--Github-rayong-tracker\\\\\\\\b31e7ee5-da3a-4697-a5e9-4a4f30e9f07a\\\\\\\\tasks\\\\\\\\b51ezaexi.output\")"
     ]
   }
 }

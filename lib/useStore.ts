@@ -6,41 +6,16 @@ import type { Identity } from "./identity";
 
 const LS_KEY = "rayong-tracker-v1";
 
-const DEFAULT_MEMBERS: Member[] = [
-  { id: "m_je",     name: "Je",     quadrant: "NW",  color: "#C96442", emoji: "🌾" },
-  { id: "m_alice",  name: "Alice",  quadrant: "NE",  color: "#3F6E97", emoji: "🛰️" },
-  { id: "m_bob",    name: "Bob",    quadrant: "SW",  color: "#3F7D58", emoji: "🌱" },
-  { id: "m_carol",  name: "Carol",  quadrant: "SE",  color: "#B68A2E", emoji: "🌳" },
-  { id: "m_dan",    name: "Dan",    quadrant: "ALL", color: "#7B5BA6", emoji: "✨" },
-];
-
-function defaultTasks(members: Member[]): Task[] {
-  const out: Task[] = [];
-  for (const m of members) {
-    for (const s of STAGES) {
-      out.push({
-        id: `t_${m.id}_${s.key}`,
-        member_id: m.id,
-        stage: s.key,
-        done: 0,
-        total: m.quadrant === "ALL" ? 100 : 120,
-        note: null,
-      });
-    }
-  }
-  return out;
-}
-
 function loadLS(): { members: Member[]; tasks: Task[] } {
-  if (typeof window === "undefined") return { members: DEFAULT_MEMBERS, tasks: defaultTasks(DEFAULT_MEMBERS) };
+  if (typeof window === "undefined") return { members: [], tasks: [] };
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed.members?.length && parsed.tasks?.length) return parsed;
+      if (Array.isArray(parsed.members) && Array.isArray(parsed.tasks)) return parsed;
     }
   } catch {}
-  return { members: DEFAULT_MEMBERS, tasks: defaultTasks(DEFAULT_MEMBERS) };
+  return { members: [], tasks: [] };
 }
 
 function saveLS(state: { members: Member[]; tasks: Task[] }) {
@@ -148,15 +123,8 @@ export function useStore(identity: Identity | null) {
           sb.from("tasks").select("*"),
         ]);
         if (!mounted) return;
-        if (m && m.length > 0) {
-          setMembers(m as Member[]);
-          setTasks((t as Task[]) || []);
-        } else {
-          await sb.from("members").insert(DEFAULT_MEMBERS);
-          await sb.from("tasks").insert(defaultTasks(DEFAULT_MEMBERS));
-          setMembers(DEFAULT_MEMBERS);
-          setTasks(defaultTasks(DEFAULT_MEMBERS));
-        }
+        setMembers((m as Member[]) || []);
+        setTasks((t as Task[]) || []);
         setLive(true);
         setReady(true);
 
@@ -199,6 +167,52 @@ export function useStore(identity: Identity | null) {
     if (!ready || live) return;
     saveLS({ members, tasks });
   }, [members, tasks, ready, live]);
+
+  // ensure a members row exists for the logged-in user, and keep its
+  // name/color/emoji in sync with the profile.
+  useEffect(() => {
+    if (!ready || !live || !identity) return;
+    const sb = getSupabase();
+    if (!sb) return;
+
+    const selfId = identity.id;
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await sb.from("members").select("*").eq("id", selfId).maybeSingle();
+      if (cancelled) return;
+      const existing = data as Member | null;
+      if (!existing) {
+        const newMember: Member = {
+          id: selfId,
+          name: identity.name,
+          quadrant: "ALL",
+          color: identity.color,
+          emoji: identity.emoji,
+        };
+        const newTasks: Task[] = STAGES.map(s => ({
+          id: `t_${selfId}_${s.key}`,
+          member_id: selfId,
+          stage: s.key as StageKey,
+          done: 0,
+          total: 100,
+          note: null,
+        }));
+        await sb.from("members").upsert([newMember]);
+        await sb.from("tasks").upsert(newTasks, { onConflict: "id" });
+      } else if (
+        existing.name !== identity.name ||
+        existing.color !== identity.color ||
+        existing.emoji !== identity.emoji
+      ) {
+        await sb.from("members")
+          .update({ name: identity.name, color: identity.color, emoji: identity.emoji })
+          .eq("id", selfId);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [ready, live, identity?.id, identity?.name, identity?.color, identity?.emoji]);
 
   // presence + broadcast channel (depends on identity)
   useEffect(() => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function LoginGate({
   configured, onSignIn,
@@ -23,7 +24,8 @@ export function LoginGate({
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
+    <main className="min-h-screen flex items-center justify-center p-6 relative">
+      <div className="absolute top-4 right-4"><ThemeToggle /></div>
       <div className="w-full max-w-sm bg-surface border border-border rounded-xl2 shadow-card p-6 text-center">
         <div className="w-12 h-12 rounded-xl mx-auto mb-3 bg-surface2 flex items-center justify-center text-2xl">🌾</div>
         <h1 className="text-lg font-semibold text-ink">Rayong Crop Tracker</h1>

@@ -10,6 +10,7 @@ import { IdentityModal } from "@/components/IdentityModal";
 import { PresenceBar } from "@/components/PresenceBar";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { LoginGate } from "@/components/LoginGate";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { computeProgress } from "@/lib/progress";
 import { isLive } from "@/lib/supabase";
 import type { Member } from "@/lib/supabase";
@@ -117,6 +118,7 @@ export default function Page() {
                 onEditMe={() => setShowIdentity(true)}
               />
             )}
+            <ThemeToggle />
             <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${live ? "border-good/30 text-good bg-good/5" : "border-warn/30 text-warn bg-warn/5"}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${live ? "bg-good" : "bg-warn"} pulse-soft`} />
               {live ? "live · synced" : "offline"}
