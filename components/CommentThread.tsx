@@ -33,6 +33,7 @@ export function CommentThread({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [editBusy, setEditBusy] = useState(false);
+  const [notify, setNotify] = useState<{ names: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function startEdit(c: CommentRow) {
@@ -92,6 +93,9 @@ export function CommentThread({
     if (busy) return;
     const trimmed = body.trim();
     if (!trimmed && pendingFiles.length === 0) return;
+    // Capture mention names BEFORE clearing the input so the toast can
+    // tell the author who was notified.
+    const submittedMentions = parseMentions(trimmed, profiles).map(m => m.name);
     setBusy(true); setError(null);
     try {
       const newComment = await addComment(trimmed || "(attachment)", profile, profiles);
@@ -105,6 +109,10 @@ export function CommentThread({
       }
       setBody("");
       setPendingFiles([]);
+      if (submittedMentions.length > 0) {
+        setNotify({ names: submittedMentions });
+        setTimeout(() => setNotify(null), 5000);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "send failed");
     } finally {
@@ -276,6 +284,15 @@ export function CommentThread({
           </button>
         </div>
         {error && <div className="text-[11px] text-crit">{error}</div>}
+        {notify && (
+          <div
+            role="status"
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-good/10 text-good text-[11px] border border-good/30"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 6 12 13 2 6" /><rect x="2" y="6" width="20" height="14" rx="2" /></svg>
+            Notified {notify.names.map(n => `@${n}`).join(", ")} · email queued for opt-in recipients
+          </div>
+        )}
       </div>
     </div>
   );

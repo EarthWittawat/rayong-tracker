@@ -9,7 +9,7 @@ import {
 } from "@/lib/issues";
 import { LabelChip } from "./LabelChip";
 import { MentionInput } from "./MentionInput";
-import { renderRichHTML } from "@/lib/mentions";
+import { parseMentions, renderRichHTML } from "@/lib/mentions";
 import { formatRelative } from "@/lib/relativeTime";
 import type { Profile } from "@/lib/auth";
 
@@ -44,6 +44,7 @@ export function IssueDetail({
   const [editBody, setEditBody] = useState(false);
   const [bodyDraft, setBodyDraft] = useState("");
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [notify, setNotify] = useState<{ names: string[] } | null>(null);
 
   if (loading) {
     return <div className="text-center py-10 text-sm text-muted2">loading issue…</div>;
@@ -72,10 +73,17 @@ export function IssueDetail({
     if (!issue || busy) return;
     const t = draft.trim();
     if (!t) return;
+    const submittedMentions = parseMentions(t, profiles).map(m => m.name);
     setBusy(true);
     try {
       const c = await addComment(t, profile, profiles);
-      if (c) setDraft("");
+      if (c) {
+        setDraft("");
+        if (submittedMentions.length > 0) {
+          setNotify({ names: submittedMentions });
+          setTimeout(() => setNotify(null), 5000);
+        }
+      }
     } finally {
       setBusy(false);
     }
@@ -246,6 +254,15 @@ export function IssueDetail({
                 className="text-xs px-3 py-1.5 rounded-md bg-accent text-white hover:brightness-110 disabled:opacity-50"
               >{busy ? "sending…" : "Comment"}</button>
             </div>
+            {notify && (
+              <div
+                role="status"
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-good/10 text-good text-[11px] border border-good/30"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 6 12 13 2 6" /><rect x="2" y="6" width="20" height="14" rx="2" /></svg>
+                Notified {notify.names.map(n => `@${n}`).join(", ")} · email queued for opt-in recipients
+              </div>
+            )}
           </div>
         </div>
 
