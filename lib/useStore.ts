@@ -228,18 +228,41 @@ export function useStore(identity: Identity | null) {
       },
     });
 
+    const selfJoinedAt = Date.now();
+    const selfMeta = {
+      name: identity.name,
+      color: identity.color,
+      emoji: identity.emoji,
+      avatar_url: (identity as { avatar_url?: string | null }).avatar_url ?? null,
+      joinedAt: selfJoinedAt,
+    };
+
+    function rebuildPresence() {
+      const state = chan.presenceState() as Record<string, Array<{ name: string; color: string; emoji: string; avatar_url?: string | null; joinedAt: number }>>;
+      const list: PresenceUser[] = [];
+      let sawSelf = false;
+      for (const [id, metas] of Object.entries(state)) {
+        const meta = metas[0];
+        if (!meta) continue;
+        if (id === identity!.id) sawSelf = true;
+        list.push({ id, name: meta.name, color: meta.color, emoji: meta.emoji, avatar_url: meta.avatar_url ?? null, joinedAt: meta.joinedAt });
+      }
+      // Always include self even if `chan.track()` hasn't echoed back yet —
+      // otherwise the footer's "Online now" can sit at 0 right after sign-in.
+      if (!sawSelf) {
+        list.push({ id: identity!.id, ...selfMeta });
+      }
+      list.sort((a, b) => a.joinedAt - b.joinedAt);
+      setPresence(list);
+    }
+
+    // Seed presence with self immediately so the UI never reports 0 online for the local user.
+    setPresence([{ id: identity.id, ...selfMeta }]);
+
     chan
-      .on("presence", { event: "sync" }, () => {
-        const state = chan.presenceState() as Record<string, Array<{ name: string; color: string; emoji: string; avatar_url?: string | null; joinedAt: number }>>;
-        const list: PresenceUser[] = [];
-        for (const [id, metas] of Object.entries(state)) {
-          const meta = metas[0];
-          if (!meta) continue;
-          list.push({ id, name: meta.name, color: meta.color, emoji: meta.emoji, avatar_url: meta.avatar_url ?? null, joinedAt: meta.joinedAt });
-        }
-        list.sort((a, b) => a.joinedAt - b.joinedAt);
-        setPresence(list);
-      })
+      .on("presence", { event: "sync" }, rebuildPresence)
+      .on("presence", { event: "join" }, rebuildPresence)
+      .on("presence", { event: "leave" }, rebuildPresence)
       .on("broadcast", { event: "activity" }, ({ payload }: { payload: ActivityEvent }) => {
         // Ignore echoes from self (broadcast.self: false should already handle, but be defensive).
         if (payload.user.id === identity.id) return;
@@ -247,13 +270,7 @@ export function useStore(identity: Identity | null) {
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await chan.track({
-            name: identity.name,
-            color: identity.color,
-            emoji: identity.emoji,
-            avatar_url: (identity as { avatar_url?: string | null }).avatar_url ?? null,
-            joinedAt: Date.now(),
-          });
+          await chan.track(selfMeta);
         }
       });
 
