@@ -32,7 +32,46 @@ import geopandas as gpd
 RAYONG_CENTER = {"lng": 101.4291, "lat": 12.8539}
 
 # Default minorities; pass --minority A203 --minority A302 ... to override.
-DEFAULT_MINORITY_CLASSES = ("A203", "A302", "A401")
+DEFAULT_MINORITY_CLASSES: tuple[str, ...] = ()
+
+# Curated preset for the Rayong AOI: the 14 named classes the team trains the
+# classifier on, plus an 'Others' catch-all. Matchers are first-match-wins
+# prefixes against LU_DES_EN (case-insensitive). Mixed polygons like
+# 'Cassava/Para rubber' fall to the first crop ('Cassava' here).
+# NOTE: prefix matching is first-win, so longer / more-specific names must
+# come BEFORE their shorter neighbours. 'Mangosteen' before 'Mango', etc.
+PRESET_RAYONG_CROPS_15: list[tuple[str, list[str]]] = [
+    ("Rice",        ["Active paddy field", "Abandoned paddy field"]),
+    ("Cassava",     ["Cassava"]),
+    ("Pineapple",   ["Pineapple"]),
+    ("Para rubber", ["Para rubber"]),
+    ("Oil palm",    ["Oil palm", "Oil Palm"]),
+    ("Durian",      ["Durian", "Durain"]),
+    ("Mangosteen",  ["Mangosteen"]),     # must precede Mango
+    ("Mango",       ["Mango"]),
+    ("Jackfruit",   ["Jack fruit"]),
+    ("Coconut",     ["Coconut"]),
+    ("Longan",      ["Longan"]),
+    ("Rambutan",    ["Rambutan", "Rambutam"]),
+    ("Langsat",     ["Langsat"]),
+    ("Reservoir",   ["Reservoir"]),
+]
+PRESETS: dict[str, list[tuple[str, list[str]]]] = {
+    "rayong-crops-15": PRESET_RAYONG_CROPS_15,
+}
+
+
+def apply_preset(des_value: str, mapping: list[tuple[str, list[str]]]) -> str:
+    """Assign a target class name based on the first matching prefix."""
+    if not isinstance(des_value, str):
+        return "Others"
+    s = des_value.strip()
+    s_lower = s.lower()
+    for target, prefixes in mapping:
+        for pref in prefixes:
+            if s_lower.startswith(pref.lower()):
+                return target
+    return "Others"
 
 # 18 distinct hues — covers the typical 12-16 LDD classes plus a few spares.
 PALETTE = [
@@ -191,9 +230,11 @@ def resolve_shapefile(path: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export public/class-stats.json from the LDD landuse shapefile.")
     parser.add_argument("--shp", type=Path, required=True, help="LDD landuse shapefile or directory containing one")
-    parser.add_argument("--class-col", default="LUL2_CODE", help="Column with the class code (default LUL2_CODE — the LDD level-2 grouping, ~15-20 classes). Use LU_CODE for raw codes (~200+).")
-    parser.add_argument("--label-col", default="LU_DES_EN", help="Column to derive human-readable label per class (mode value). Default LU_DES_EN.")
-    parser.add_argument("--drop-mixed", action="store_true", default=True, help="Drop mixed-class codes that contain '/' (LDD encodes 'A2/A3' for mixed plots).")
+    parser.add_argument("--preset", choices=sorted(PRESETS.keys()), default="rayong-crops-15",
+                        help="Curated class set. 'rayong-crops-15' maps LU_DES_EN to the 14 crop classes the team trains on plus an 'Others' bucket. Pass --preset '' (empty) to disable presets and group by --class-col instead.")
+    parser.add_argument("--class-col", default="LUL2_CODE", help="When --preset is empty, the column to group by. Default LUL2_CODE (~15-20 classes).")
+    parser.add_argument("--label-col", default="LU_DES_EN", help="Column to derive a human-readable label per class (mode value). Default LU_DES_EN.")
+    parser.add_argument("--drop-mixed", action="store_true", default=True, help="Drop mixed-class codes that contain '/' (LDD encodes 'A2/A3' for mixed plots). Ignored when --preset is set.")
     parser.add_argument("--keep-mixed", dest="drop_mixed", action="store_false", help="Keep mixed-class codes in the output.")
     parser.add_argument("--min-area-km2", type=float, default=0.0, help="Drop classes whose total area is below this many km² (default 0 = keep all).")
     parser.add_argument("--minority", action="append", default=list(DEFAULT_MINORITY_CLASSES),
@@ -236,17 +277,30 @@ def main() -> int:
     lu_ll["_quadrant"] = [quadrant_of(x, y) for x, y in zip(lu_ll._cen_lng, lu_ll._cen_lat)]
     lu_ll["_s2_tile"] = [s2_tile_of(x, y, mgrs_obj) for x, y in zip(lu_ll._cen_lng, lu_ll._cen_lat)]
 
-    cls_col = args.class_col
-    if cls_col not in lu_ll.columns:
-        raise ValueError(f"class column '{cls_col}' not in shapefile. available: {list(lu_ll.columns)}")
-    lu_ll[cls_col] = lu_ll[cls_col].astype(str).fillna("__unk__")
+    # Preset path: stamp a target class per polygon by matching LU_DES_EN.
+    if args.preset:
+        des_col = args.label_col if args.label_col in lu_ll.columns else "LU_DES_EN"
+        if des_col not in lu_ll.columns:
+            raise ValueError(f"--preset requires the '{des_col}' column. available: {list(lu_ll.columns)}")
+        mapping = PRESETS[args.preset]
+        lu_ll["_preset_class"] = lu_ll[des_col].apply(lambda v: apply_preset(v, mapping))
+        # Preserve the user-specified target order so the JSON renders in the
+        # same order they listed (Rice → Cassava → ... → Reservoir → Others).
+        cls_col = "_preset_class"
+        preset_order = [t for t, _ in mapping] + ["Others"]
+    else:
+        cls_col = args.class_col
+        if cls_col not in lu_ll.columns:
+            raise ValueError(f"class column '{cls_col}' not in shapefile. available: {list(lu_ll.columns)}")
+        lu_ll[cls_col] = lu_ll[cls_col].astype(str).fillna("__unk__")
+        preset_order = None
 
-    # Drop LDD mixed-class polygons ("A2/A3" etc) unless the user asked to keep them.
-    if args.drop_mixed:
-        before = len(lu_ll)
-        lu_ll = lu_ll[~lu_ll[cls_col].str.contains("/")].copy()
-        if len(lu_ll) < before:
-            print(f"  dropped {before - len(lu_ll)} mixed-class polygons (use --keep-mixed to override)")
+        # Drop LDD mixed-class polygons ("A2/A3" etc) unless the user asked to keep them.
+        if args.drop_mixed:
+            before = len(lu_ll)
+            lu_ll = lu_ll[~lu_ll[cls_col].str.contains("/")].copy()
+            if len(lu_ll) < before:
+                print(f"  dropped {before - len(lu_ll)} mixed-class polygons (use --keep-mixed to override)")
 
     # Merge user-supplied label overrides on top of the built-in LDD dict.
     labels = dict(LABELS)
@@ -279,7 +333,12 @@ def main() -> int:
         lu_ll = lu_ll[lu_ll[cls_col].isin(total_by_class.index)].copy()
 
     minority_ids = list(args.minority)
-    ordered = [str(c) for c in total_by_class.index]
+    # Preset mode keeps a deterministic user-facing order; raw mode sorts by area.
+    if preset_order is not None:
+        present = set(total_by_class.index.astype(str))
+        ordered = [c for c in preset_order if c in present]
+    else:
+        ordered = [str(c) for c in total_by_class.index]
     lu_ll["_class"] = lu_ll[cls_col]
 
     class_defs = []
