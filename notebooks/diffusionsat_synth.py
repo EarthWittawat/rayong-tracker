@@ -42,8 +42,20 @@ SYNTH_OUT = REPO_ROOT / "data" / "_cache" / "synth"
 
 
 def _patch_legacy_imports() -> None:
-    """DSAT targets diffusers<=0.18 + huggingface_hub<=0.16. Newer envs
-    rename a couple of symbols — shim them so the import doesn't crash."""
+    """DSAT imports `from diffusers.models.cross_attention import AttnProcessor`.
+
+    In diffusers>=0.18 that module no longer exists — its symbols were
+    split between `diffusers.models.attention` (`Attention`) and
+    `diffusers.models.attention_processor` (`AttnProcessor`,
+    `CrossAttnProcessor`). Build a synthetic `cross_attention` module
+    that re-exports the union plus the renamed aliases so the legacy
+    import works under the pinned 0.18.2 env.
+
+    Also patches `huggingface_hub.cached_download` → `hf_hub_download`
+    since the old name was removed in hf_hub >= 0.26.
+    """
+    import types
+
     try:
         import huggingface_hub as hf
         if not hasattr(hf, "cached_download") and hasattr(hf, "hf_hub_download"):
@@ -53,12 +65,23 @@ def _patch_legacy_imports() -> None:
 
     try:
         if "diffusers.models.cross_attention" not in sys.modules:
-            attn = importlib.import_module("diffusers.models.attention")
-            sys.modules["diffusers.models.cross_attention"] = attn
+            attn      = importlib.import_module("diffusers.models.attention")
+            attn_proc = importlib.import_module("diffusers.models.attention_processor")
+            shim = types.ModuleType("diffusers.models.cross_attention")
+            for src in (attn, attn_proc):
+                for name in dir(src):
+                    if name.startswith("_"):
+                        continue
+                    if not hasattr(shim, name):
+                        setattr(shim, name, getattr(src, name))
             for old, new in [("CrossAttention", "Attention"),
                              ("CrossAttnProcessor", "AttnProcessor")]:
-                if hasattr(attn, new) and not hasattr(attn, old):
-                    setattr(attn, old, getattr(attn, new))
+                if not hasattr(shim, old):
+                    for src in (attn_proc, attn):
+                        if hasattr(src, new):
+                            setattr(shim, old, getattr(src, new))
+                            break
+            sys.modules["diffusers.models.cross_attention"] = shim
     except Exception as e:  # noqa: BLE001
         print(f"note: diffusers shim skipped ({e})", file=sys.stderr)
 
