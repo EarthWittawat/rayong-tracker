@@ -51,15 +51,15 @@ const GUIDE: Record<StageKey, GuideEntry> = {
   },
   gen: {
     emoji: "✨",
-    tagline: "Synthesise minority-class patches.",
+    tagline: "Latent-LoRA fine-tune of opensr-ldsrs2 per minority class.",
     what:
-      "Some Rayong classes hold <1 % of pixels. Base SR diffusion is seeded with real LR minority patches + noise in LR space; output 2.5 m patches feed extra rows into the pixel table. LoRA fine-tuning is gated off (opensr-ldsrs2 is latent — the pixel-space loop crashed; needs a latent rewrite).",
+      "Sentinel-2 4-band patches are encoded to latent z₀ via the frozen CompVis VAE. UNet learns ε-prediction on the concat of (noisy latent, LR latent): L = E ‖ε − ε_θ([z_t ‖ z_c], t)‖² with z_t = √ᾱ_t z₀ + √(1−ᾱ_t) ε. Only LoRA adapters (rank 8, α 16) on the attention q/k/v/proj_out Conv2d projections receive gradients.",
     why:
-      "Pure oversampling duplicates noise. Diffusion-sampled patches give the RF realistic minority spectra without skewing the distribution the way SMOTE does.",
+      "DiffusionSat is RGB-only and OOD on Thai orchards. Plain oversampling duplicates noise. Latent-LoRA on the model already trained on Sentinel-2 keeps the radiometry honest and stays 4-band.",
     completion:
-      "~200 synthetic patches per minority class under `cache/synth/<class>/`. done = classes with patches written; total = `len(CFG.minority_classes)`.",
+      "Per-class LoRA at `cache/lora/<class>.pt` (~10 MB) + ~200 synthetic patches at `cache/synth/<class>/`. done = classes with LoRA + patches written; total = `len(CFG.minority_classes)`.",
     inputs: "Real SR patches per minority class (≥ 100 each)",
-    outputs: ".npy + RGB .png per patch · feature rows appended to pixel_table",
+    outputs: "LoRA adapters · .npy + RGB .png per patch · feature rows appended to pixel_table",
     tools: [
       { name: "opensr-model", url: "https://github.com/ESAOpenSR/opensr-model" },
       { name: "peft (LoRA)", url: "https://huggingface.co/docs/peft/" },

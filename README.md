@@ -8,7 +8,7 @@ The web app is the *operations side* of the project. The Jupyter notebook in `no
 | ------ | ---------------------------------------------------------------------------- |
 | Data   | CDSE OpenEO · Sentinel-2 L2A monthly medians with SCL cloud masking          |
 | SR     | OpenSR latent-diffusion super-resolution, 10 m → 2.5 m on B02/B03/B04/B08    |
-| GenAI  | LoRA-adapted SEN2SR + DiffusionSat for minority-class synthesis              |
+| GenAI  | Latent-LoRA fine-tuning of opensr-ldsrs2 per minority class (4-band)         |
 | Feat   | LDD landuse rasterised on the SR grid, temporal stats + indices + GLCM/LBP   |
 | RF     | Per-pixel Random Forest cascade (stage-1 + minority-focused stage-2)         |
 
@@ -83,7 +83,7 @@ The five stages mirror notebook sections one-for-one. See **PipelineGuide** in t
 
 1. **Data** · CDSE openEO pulls Sentinel-2 L2A scenes for the AOI, masks SCL classes 3 / 8 / 9 / 10 (cloud-shadow, mid + high cloud, cirrus), and aggregates a monthly median per band. Output: one GeoTIFF per month under `cache/s2_monthly/<aoi>/`.
 2. **SR** · `opensr_model.SRLatentDiffusion` upsamples 10 m → 2.5 m on the 4-band RGB-NIR composite. 20 m bands are bilinearly upsampled afterwards (the SR model is not trained on them). Outputs: 4× super-resolved GeoTIFFs in `cache/s2_sr/<aoi>/`.
-3. **GenAI** · LoRA adapters fine-tune the SR diffusion UNet per minority class on real SR patches; DiffusionSat is run zero-shot for comparison. FID against held-out real samples is the sanity check.
+3. **GenAI** · Latent-space LoRA adapters fine-tune the opensr-ldsrs2 UNet per minority class on real SR patches. Training runs in the model's native latent space (VAE encode → DDPM noise → predict ε), so synthetic outputs are 4-band Sentinel-2 reflectance, not RGB. Per-class adapter is ~10 MB; ~200 synthetic patches are appended to the pixel table for §RF.
 4. **Feat** · LDD landuse shapefile is rasterised onto the SR grid; per-pixel features = monthly band statistics + NDVI / NDWI / EVI + GLCM / LBP texture in a small window. Written to `pixel_table.parquet`.
 5. **RF** · `sklearn.RandomForestClassifier` stage-1 + a minority-focused stage-2 cascade. Stage-2 catches pixels where stage-1 confidence < 0.6 or where stage-1 predicts a dominant class but the feature vector is close to a minority centroid.
 

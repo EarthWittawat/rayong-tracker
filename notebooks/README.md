@@ -11,7 +11,7 @@
 | 3   | SR     | OpenSR latent diffusion ×4 (10 m → 2.5 m) on B02 / B03 / B04 / B08                 |
 | 4   | —      | native-vs-SR side-by-side + zoom + monthly strip + reflectance histograms          |
 | 5   | Feat   | LDD landuse → 15-class raster on SR grid → per-class patch extraction              |
-| 6   | GenAI  | base SR diffusion sampler seeded by real LR patches; DSAT path is a separate env   |
+| 6   | GenAI  | latent-LoRA fine-tuning of opensr-ldsrs2 per minority class · 4-band reflectance   |
 | 6.1 | —      | RGB / false-colour NIR / NDVI grid of synthetic patches per minority class         |
 | 7   | Feat   | pixel table: monthly stats + NDVI / NDWI · synth rows concatenated                 |
 | 8   | RF     | stage-1 RF + minority-focused stage-2 cascade · classification report + figures    |
@@ -62,41 +62,68 @@ Refresh after editing the env file:
 conda env update -f environment.yml --prune
 ```
 
-### DiffusionSat (optional, separate env)
+### §6 GenAI — latent-LoRA on opensr-ldsrs2
 
-DSAT pins `diffusers==0.18.2` / `huggingface_hub==0.16.4`, which conflicts with the main `synthcrop` env. Use a dedicated env:
+We synthesise minority-class Sentinel-2 patches by **fine-tuning a small LoRA adapter on the same `opensr-ldsrs2` latent diffusion model already used for super-resolution**. Trains in latent space, conditioned on the LR latent — so the output is 4-band reflectance with the right radiometry, not RGB-only natural-image samples.
 
-```bash
-conda env create -f environment-diffusionsat.yml
-conda activate synthcrop-dsat
+DiffusionSat was considered and removed: it emits RGB only, isn't class-conditioned on Thai crops, and the weights aren't on a public HF repo.
 
-# register the kernel so JupyterLab can see it
-python -m ipykernel install --user --name synthcrop-dsat --display-name "Python (synthcrop-dsat)"
+#### Model architecture
 
-# one-time: clone the DSAT repo next to this folder
-git clone https://github.com/samar-khanna/DiffusionSat.git external/DiffusionSat
+```
+   real 4-band patch x ∈ ℝ^(4×256×256)
+            │
+            ▼
+   ┌────────────────────┐
+   │  VAE encoder Eφ    │  (frozen, CompVis)
+   └────────────────────┘
+            │  z₀  (scale s ≈ 0.18215)
+   ┌────────┴─────────┐
+   ▼                  ▼
+   LR latent z_c      q(z_t | z₀) forward noising
+   = Eφ(LR↑256)       z_t = √ᾱ_t z₀ + √(1-ᾱ_t) ε
+            │                  │
+            └────── concat ────┘
+                    │  8-channel
+                    ▼
+       ┌──────────────────────────┐
+       │  UNet_θ  (CompVis vanilla │ ← LoRA on q / k / v / proj_out
+       │  attention, Conv2d 1×1)  │   (Conv2d 1×1 projections)
+       └──────────────────────────┘
+                    │  ε̂_θ
+              DDIM denoise (T steps)
+                    │
+                    ▼
+       ┌────────────────────┐
+       │  VAE decoder Dφ    │
+       └────────────────────┘
+                    │
+                    ▼
+       synthetic x̂ ∈ ℝ^(4×256×256)
 ```
 
-**Weights are not on a public HF repo.** `samar-khanna/DiffusionSat` returns 401 / "Repository Not Found". Open `external/DiffusionSat/README.md`, find the Google Drive link under *Pre-trained checkpoints*, download the snapshot folder, then point the loader at it:
+- VAE: frozen, CompVis-style autoencoder, 4-channel input/output. Latent: 4 channels, 4× spatial downsample.
+- UNet: 113 M params, vanilla CompVis attention (q / k / v / proj_out are Conv2d 1×1). First conv expects 8 channels (= `[z_t ‖ z_c]`).
+- LoRA: rank `r=8`, `α=16`, applied only to attention projections. ≈10 MB trainable per class vs ≈110 MB frozen base.
 
-```bash
-# either: drop the snapshot under the conventional path the notebook tries first
-mv ~/Downloads/diffusionsat_snapshot notebooks/external/DiffusionSat/weights/snapshot
+#### Loss
 
-# or: set an explicit env var (Windows PowerShell example)
-$env:DSAT_MODEL_PATH = "D:\\path\\to\\diffusionsat_snapshot"
+ε-prediction DDPM in latent space:
+
+```
+L_LoRA(θ) = E_{x, ε, t} [ || ε − ε_θ([z_t ‖ z_c], t) ||₂² ]
+
+z₀ = s · Eφ(x).sample()                          (real patch encode)
+z_c = s · Eφ(LR↑).sample()                       (LR-upsample encode, conditioning)
+z_t = √ᾱ_t · z₀ + √(1 − ᾱ_t) · ε                  (forward DDPM step)
+ε  ~ N(0, I),   t ~ Uniform{1, …, T},  T = 1000
 ```
 
-Once the local path resolves, the notebook + CLI load DSAT without hitting HF.
+LoRA reparameterisation: every target weight `W ∈ ℝ^(d_out × d_in)` becomes `W' = W + (α/r) B A` with `A ∈ ℝ^(r × d_in)`, `B ∈ ℝ^(d_out × r)`. Only `A`, `B` train.
 
-Then you have two ways to sample, both producing the same `.npy + .png` layout under `data/_cache/synth/<class>/`:
+#### Sampling
 
-| How                     | When to use                                                              |
-| ----------------------- | ------------------------------------------------------------------------ |
-| `diffusionsat.ipynb`    | Default. Open in JupyterLab, pick the `Python (synthcrop-dsat)` kernel, run top-to-bottom. Inline preview at the end. |
-| `diffusionsat_synth.py` | Batch / headless / scripted runs. Same logic, CLI args.                  |
-
-After either run, switch back to the `Python (synthcrop)` kernel in `pipeline.ipynb` and re-run §6.1 — it picks up the DSAT outputs automatically.
+After training, the LoRA-wrapped UNet is reattached into `model.model.diffusion_model`, so the regular `model.forward(LR_seed, sampling_steps=T)` call uses the adapted weights. LR seeds are real minority patches with light Gaussian noise (`σ ≈ 0.03`) for sample-to-sample diversity. Outputs land in `data/_cache/synth/<class>/patch_NNN.{npy, png}` and per-class LoRA weights in `data/_cache/lora/<class>.pt`.
 
 ## Data
 
