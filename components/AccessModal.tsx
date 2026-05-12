@@ -236,7 +236,7 @@ export function AccessModal({
         </div>
 
         <p className="text-[10px] text-muted2 mt-4">
-          You can only revoke / delete codes you created. Once a teammate redeems a code, their access stays even if the code is later revoked — remove their row from <code className="bg-surface2 px-1 rounded">dashboard_members</code> in the Supabase SQL editor to fully evict.
+          You can only revoke / delete codes you created. Once a teammate redeems a code, their access stays even if the code is later revoked — remove their row from <code className="bg-surface2 px-1 rounded">dashboard_members</code> in the SQL editor to fully evict.
         </p>
       </div>
     </div>

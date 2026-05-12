@@ -248,7 +248,7 @@ export default function Page() {
             )}
             <span className={`hidden sm:inline-flex items-center gap-1.5 text-[10px] eyebrow px-2.5 py-1 rounded-sm border tabular ${live ? "border-good/60 text-good bg-good/10" : "border-warn/60 text-warn bg-warn/10"}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${live ? "bg-good" : "bg-warn"} pulse-soft`} />
-              {live ? "synced" : "offline"}
+              {live ? "online" : "offline"}
             </span>
             <ThemeToggle />
             <button
@@ -331,7 +331,7 @@ export default function Page() {
               <div className="eyebrow text-[10px] text-muted2">Section 1 of 2</div>
               <h2 className="text-2xl font-bold text-ink mt-0.5">Work</h2>
               <p className="text-xs text-muted mt-1 max-w-xl">
-                The live operating surface — overall progress, the crew board, and the map. Everything here writes back to Supabase in real time.
+                Overall progress, the crew board, and the map. Edits save as you go.
               </p>
             </div>
             <a href="#insights" className="text-[11px] text-muted hover:text-ink inline-flex items-center gap-1">
@@ -558,7 +558,7 @@ export default function Page() {
           <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
             <div>
               <div className="eyebrow text-[10px] nav-muted">Team telemetry</div>
-              <div className="text-xs nav-muted">live · derived from current board state</div>
+              <div className="text-xs nav-muted">derived from current board state</div>
             </div>
             <div className="text-[10px] eyebrow tabular nav-muted">
               {footerStats.lastEdit ? `last edit ${formatRelative(footerStats.lastEdit)}` : "no edits yet"}
@@ -609,7 +609,7 @@ export default function Page() {
             <span>OpenSR · DiffusionSat</span>
             <span className="w-1 h-1 rounded-full bg-white/30" />
             <span>Esri · Maxar imagery</span>
-            <span className="ml-auto">edits sync via Supabase</span>
+            <span className="ml-auto">SynthCrop · v1.0</span>
           </div>
         </div>
       </footer>

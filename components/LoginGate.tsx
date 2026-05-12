@@ -55,7 +55,7 @@ export function LoginGate({
 
         <h1 className="text-3xl font-bold text-white">SynthCrop Progress Tracker</h1>
         <p className="text-sm text-white/70 mt-2 mb-8 max-w-sm mx-auto">
-          Real-time team board for the Sentinel-2 crop-mapping pipeline. Sign in with Google to join the board.
+          Team board for the Sentinel-2 crop-mapping pipeline. Sign in with Google to join.
         </p>
 
         <div className="bg-[rgb(var(--c-nav-bg2))]/85 backdrop-blur-md border border-[rgb(var(--c-nav-border))] rounded-md p-5 text-left">
