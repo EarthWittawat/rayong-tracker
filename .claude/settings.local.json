@@ -14,7 +14,11 @@
       "PowerShell(supabase *)",
       "Bash(npm install *)",
       "Bash(grep -qE \"Compiled successfully|Failed|error|Error\" \"C:\\\\\\\\Users\\\\\\\\wttwk\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\D--Github-rayong-tracker\\\\\\\\b31e7ee5-da3a-4697-a5e9-4a4f30e9f07a\\\\\\\\tasks\\\\\\\\b51ezaexi.output\")",
-      "Bash(tail -50 \"C:\\\\\\\\Users\\\\\\\\wttwk\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\D--Github-rayong-tracker\\\\\\\\b31e7ee5-da3a-4697-a5e9-4a4f30e9f07a\\\\\\\\tasks\\\\\\\\b51ezaexi.output\")"
+      "Bash(tail -50 \"C:\\\\\\\\Users\\\\\\\\wttwk\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\D--Github-rayong-tracker\\\\\\\\b31e7ee5-da3a-4697-a5e9-4a4f30e9f07a\\\\\\\\tasks\\\\\\\\b51ezaexi.output\")",
+      "PowerShell(pnpm *)",
+      "Bash(pnpm install *)",
+      "Bash(grep -qE \"Done|ERR|error\" \"C:\\\\\\\\Users\\\\\\\\wttwk\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\D--Github-rayong-tracker\\\\\\\\b31e7ee5-da3a-4697-a5e9-4a4f30e9f07a\\\\\\\\tasks\\\\\\\\bdm8yv89x.output\")",
+      "Bash(tail -20 \"C:\\\\\\\\Users\\\\\\\\wttwk\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\D--Github-rayong-tracker\\\\\\\\b31e7ee5-da3a-4697-a5e9-4a4f30e9f07a\\\\\\\\tasks\\\\\\\\bdm8yv89x.output\")"
     ]
   }
 }
