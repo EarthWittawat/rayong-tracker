@@ -919,37 +919,52 @@ def _s2_tile(lng: float, lat: float):
 lu_ll["_quadrant"] = [_quadrant(x, y) for x, y in zip(lu_ll._cen_lng, lu_ll._cen_lat)]
 lu_ll["_s2_tile"]  = [_s2_tile (x, y) for x, y in zip(lu_ll._cen_lng, lu_ll._cen_lat)]
 
-# Class column (configurable — see CFG.ldd_landuse note).
-CLASS_COL = "LU_CODE" if "LU_CODE" in lu_ll.columns else lu_ll.columns[0]
+# Class column: prefer the LDD level-2 grouping (~15-20 classes) over raw LU_CODE
+# (~200+ leaf codes including mixed plots). Set CLASS_COL = "LU_CODE" if you
+# want the full leaf set instead.
+CLASS_COL = "LUL2_CODE" if "LUL2_CODE" in lu_ll.columns else ("LU_CODE" if "LU_CODE" in lu_ll.columns else lu_ll.columns[0])
 lu_ll[CLASS_COL] = lu_ll[CLASS_COL].astype(str).fillna("__unk__")
 
-# Build the kept class set: top-N by area + every minority class (pinned).
-TOP_N = 8
+# Drop mixed-class polygons like "A2/A3" so the headline classes stay clean.
+lu_ll = lu_ll[~lu_ll[CLASS_COL].str.contains("/")].copy()
+
+# Keep every distinct LU_CODE — no top-N folding, no 'other' bucket. The
+# web ClassInsights panel can render the full list with one row per class.
 total_by_class = lu_ll.groupby(CLASS_COL)["area_km2"].sum().sort_values(ascending=False)
-top_ids      = list(total_by_class.head(TOP_N).index)
+ordered = [str(c) for c in total_by_class.index]
+lu_ll["_class"] = lu_ll[CLASS_COL]
 minority_ids = list(CFG.minority_classes)
-keep_ids     = list(dict.fromkeys(top_ids + minority_ids))  # de-dupe, preserve order
 
-lu_ll["_class"] = lu_ll[CLASS_COL].where(lu_ll[CLASS_COL].isin(keep_ids), other="other")
-
-# Deterministic palette. Minorities always flagged in a warning tone so they stand out in the bars.
-PALETTE = ["#3F7D58","#3F6E97","#C96442","#B68A2E","#7B5BA6","#9B5C7A","#4F7A95","#7C7A52","#A85C9D","#5F8A6E","#8B6F47","#D4A748"]
+# 18 distinct hues to cover the typical 12-16 LDD classes plus a few spares.
+PALETTE = [
+    "#3F7D58","#3F6E97","#C96442","#B68A2E","#7B5BA6","#9B5C7A",
+    "#4F7A95","#7C7A52","#A85C9D","#5F8A6E","#8B6F47","#D4A748",
+    "#5B8B7C","#A67B5B","#6B7280","#9B7CB6","#C68A6C","#7AA66D",
+]
 MINORITY_COLOR = "#B14B3D"
-OTHER_COLOR    = "#9A968D"
 
-# Human-readable label override — extend this dict as you learn the LU_CODE meanings.
+# Human-readable LDD landuse labels. Extend as you learn the codes.
 LABELS = {
-    # "A101": "Paddy rice",
-    # "A203": "Cassava",
-    # "A302": "Sugar cane",
-    # "A401": "Pineapple",
+    "A100":"Paddy field","A101":"Paddy rice","A102":"Paddy rice (2nd crop)","A103":"Abandoned paddy",
+    "A200":"Field crops","A201":"Cassava","A202":"Sugar cane","A203":"Maize / Corn","A204":"Pineapple",
+    "A205":"Sorghum","A206":"Cotton","A207":"Soybean","A208":"Mung bean","A209":"Tobacco",
+    "A300":"Perennial crop","A301":"Rubber","A302":"Oil palm","A303":"Coconut","A304":"Coffee","A305":"Tea","A306":"Cashew",
+    "A400":"Orchard","A401":"Mango","A402":"Durian","A403":"Longan","A404":"Mangosteen",
+    "A405":"Rambutan","A406":"Lychee","A407":"Citrus","A408":"Banana","A409":"Papaya",
+    "A500":"Horticulture","A501":"Vegetables","A502":"Cut flowers",
+    "A600":"Pasture","A700":"Aquaculture","A701":"Shrimp farm","A702":"Fish farm",
+    "F100":"Evergreen forest","F200":"Deciduous forest","F300":"Mangrove forest",
+    "F400":"Beach forest","F500":"Forest plantation","F600":"Bamboo",
+    "U100":"City / town","U200":"Village","U300":"Commercial","U400":"Industrial","U500":"Institutional",
+    "W100":"River / canal","W200":"Reservoir / lake","W300":"Sea",
+    "M100":"Wetland","M200":"Marsh / swamp","M300":"Mine / pit",
+    "I100":"Industrial site","X000":"Misc / unclassified",
 }
 
-ordered = keep_ids + (["other"] if "other" in lu_ll["_class"].unique() else [])
 class_defs = []
 for i, cid in enumerate(ordered):
-    is_min = cid in CFG.minority_classes
-    color  = MINORITY_COLOR if is_min else (OTHER_COLOR if cid == "other" else PALETTE[i % len(PALETTE)])
+    is_min = cid in minority_ids
+    color  = MINORITY_COLOR if is_min else PALETTE[i % len(PALETTE)]
     class_defs.append({
         "id": cid,
         "label": LABELS.get(cid, cid),

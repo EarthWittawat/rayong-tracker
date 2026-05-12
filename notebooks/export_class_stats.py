@@ -34,17 +34,97 @@ RAYONG_CENTER = {"lng": 101.4291, "lat": 12.8539}
 # Default minorities; pass --minority A203 --minority A302 ... to override.
 DEFAULT_MINORITY_CLASSES = ("A203", "A302", "A401")
 
+# 18 distinct hues — covers the typical 12-16 LDD classes plus a few spares.
 PALETTE = [
-    "#3F7D58", "#3F6E97", "#C96442", "#B68A2E", "#7B5BA6", "#9B5C7A",
-    "#4F7A95", "#7C7A52", "#A85C9D", "#5F8A6E", "#8B6F47", "#D4A748",
+    "#3F7D58",  # forest-green
+    "#3F6E97",  # info blue
+    "#C96442",  # accent rust
+    "#B68A2E",  # warn amber
+    "#7B5BA6",  # purple
+    "#9B5C7A",  # mauve
+    "#4F7A95",  # slate blue
+    "#7C7A52",  # olive
+    "#A85C9D",  # magenta
+    "#5F8A6E",  # sea-foam
+    "#8B6F47",  # bronze
+    "#D4A748",  # gold
+    "#5B8B7C",  # teal
+    "#A67B5B",  # tan
+    "#6B7280",  # cool grey
+    "#9B7CB6",  # lavender
+    "#C68A6C",  # peach
+    "#7AA66D",  # spring-green
 ]
 MINORITY_COLOR = "#B14B3D"
-OTHER_COLOR = "#9A968D"
 
-# Optional human-readable labels for LDD codes (extend as the team learns them).
+# Best-effort LDD landuse code → English label mapping. Edit / extend here, or
+# pass --labels labels.json to override per project. Codes not in this dict
+# fall through to the raw code as their label.
 LABELS: dict[str, str] = {
-    # "A101": "Paddy rice",
-    # "A203": "Cassava",
+    # === paddy / wet rice ===
+    "A100": "Paddy field",
+    "A101": "Paddy rice",
+    "A102": "Paddy rice (2nd crop)",
+    "A103": "Abandoned paddy",
+    # === field crops ===
+    "A200": "Field crops",
+    "A201": "Cassava",
+    "A202": "Sugar cane",
+    "A203": "Maize / Corn",
+    "A204": "Pineapple",
+    "A205": "Sorghum",
+    "A206": "Cotton",
+    "A207": "Soybean",
+    "A208": "Mung bean",
+    "A209": "Tobacco",
+    # === perennial / industrial tree crops ===
+    "A300": "Perennial crop",
+    "A301": "Rubber",
+    "A302": "Oil palm",
+    "A303": "Coconut",
+    "A304": "Coffee",
+    "A305": "Tea",
+    "A306": "Cashew",
+    # === orchards ===
+    "A400": "Orchard",
+    "A401": "Mango",
+    "A402": "Durian",
+    "A403": "Longan",
+    "A404": "Mangosteen",
+    "A405": "Rambutan",
+    "A406": "Lychee",
+    "A407": "Citrus",
+    "A408": "Banana",
+    "A409": "Papaya",
+    # === horticulture / aquaculture / pasture ===
+    "A500": "Horticulture",
+    "A501": "Vegetables",
+    "A502": "Cut flowers",
+    "A600": "Pasture",
+    "A700": "Aquaculture",
+    "A701": "Shrimp farm",
+    "A702": "Fish farm",
+    # === forest ===
+    "F100": "Evergreen forest",
+    "F200": "Deciduous forest",
+    "F300": "Mangrove forest",
+    "F400": "Beach forest",
+    "F500": "Forest plantation",
+    "F600": "Bamboo",
+    # === built-up / water / misc ===
+    "U100": "City / town",
+    "U200": "Village",
+    "U300": "Commercial",
+    "U400": "Industrial",
+    "U500": "Institutional",
+    "W100": "River / canal",
+    "W200": "Reservoir / lake",
+    "W300": "Sea",
+    "M100": "Wetland",
+    "M200": "Marsh / swamp",
+    "I100": "Industrial site",
+    "M300": "Mine / pit",
+    "X000": "Misc / unclassified",
 }
 
 
@@ -111,12 +191,16 @@ def resolve_shapefile(path: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export public/class-stats.json from the LDD landuse shapefile.")
     parser.add_argument("--shp", type=Path, required=True, help="LDD landuse shapefile or directory containing one")
-    parser.add_argument("--class-col", default="LU_CODE", help="Column with the class code (default LU_CODE)")
-    parser.add_argument("--top-n", type=int, default=8, help="Top-N classes by area to keep verbatim (rest -> 'other')")
+    parser.add_argument("--class-col", default="LUL2_CODE", help="Column with the class code (default LUL2_CODE — the LDD level-2 grouping, ~15-20 classes). Use LU_CODE for raw codes (~200+).")
+    parser.add_argument("--label-col", default="LU_DES_EN", help="Column to derive human-readable label per class (mode value). Default LU_DES_EN.")
+    parser.add_argument("--drop-mixed", action="store_true", default=True, help="Drop mixed-class codes that contain '/' (LDD encodes 'A2/A3' for mixed plots).")
+    parser.add_argument("--keep-mixed", dest="drop_mixed", action="store_false", help="Keep mixed-class codes in the output.")
+    parser.add_argument("--min-area-km2", type=float, default=0.0, help="Drop classes whose total area is below this many km² (default 0 = keep all).")
     parser.add_argument("--minority", action="append", default=list(DEFAULT_MINORITY_CLASSES),
-                        help="Class codes to always include and flag as minority. Repeatable.")
+                        help="Class codes to flag as minority (highlighted in red). Repeatable.")
     parser.add_argument("--out", type=Path, default=None, help="Output JSON path (default: <repo>/public/class-stats.json)")
     parser.add_argument("--skip-s2", action="store_true", help="Skip the per-Sentinel-2-tile breakdown (no mgrs dependency)")
+    parser.add_argument("--labels", type=Path, default=None, help="JSON file with code->label overrides. Merged on top of the built-in dict.")
     args = parser.parse_args()
 
     # Repo root = parent of notebooks/
@@ -153,27 +237,62 @@ def main() -> int:
     lu_ll["_s2_tile"] = [s2_tile_of(x, y, mgrs_obj) for x, y in zip(lu_ll._cen_lng, lu_ll._cen_lat)]
 
     cls_col = args.class_col
+    if cls_col not in lu_ll.columns:
+        raise ValueError(f"class column '{cls_col}' not in shapefile. available: {list(lu_ll.columns)}")
     lu_ll[cls_col] = lu_ll[cls_col].astype(str).fillna("__unk__")
 
-    # Top-N classes by total area + always-pinned minority classes
-    total_by_class = lu_ll.groupby(cls_col)["area_km2"].sum().sort_values(ascending=False)
-    top_ids = list(total_by_class.head(args.top_n).index)
-    minority_ids = list(args.minority)
-    keep_ids = list(dict.fromkeys(top_ids + minority_ids))
-    lu_ll["_class"] = lu_ll[cls_col].where(lu_ll[cls_col].isin(keep_ids), other="other")
+    # Drop LDD mixed-class polygons ("A2/A3" etc) unless the user asked to keep them.
+    if args.drop_mixed:
+        before = len(lu_ll)
+        lu_ll = lu_ll[~lu_ll[cls_col].str.contains("/")].copy()
+        if len(lu_ll) < before:
+            print(f"  dropped {before - len(lu_ll)} mixed-class polygons (use --keep-mixed to override)")
 
-    ordered = keep_ids + (["other"] if "other" in lu_ll["_class"].unique() else [])
+    # Merge user-supplied label overrides on top of the built-in LDD dict.
+    labels = dict(LABELS)
+    if args.labels is not None:
+        labels.update(json.loads(Path(args.labels).read_text(encoding="utf-8")))
+
+    # Auto-derive labels from --label-col (e.g. LU_DES_EN) by taking the most
+    # common value within each class group. Falls back to the LABELS dict, then
+    # to the raw code, so unknowns still render.
+    derived_labels: dict[str, str] = {}
+    if args.label_col and args.label_col in lu_ll.columns:
+        for cid, sub in lu_ll.groupby(cls_col):
+            non_null = sub[args.label_col].dropna()
+            if len(non_null):
+                mode = non_null.astype(str).mode()
+                if len(mode):
+                    derived_labels[str(cid)] = mode.iloc[0]
+
+    def label_for(cid: str) -> str:
+        return labels.get(cid) or derived_labels.get(cid) or cid
+
+    # Aggregate area per class. Optionally drop tiny classes below the threshold.
+    total_by_class = lu_ll.groupby(cls_col)["area_km2"].sum().sort_values(ascending=False)
+    if args.min_area_km2 > 0:
+        kept = total_by_class[total_by_class >= args.min_area_km2]
+        dropped = len(total_by_class) - len(kept)
+        if dropped > 0:
+            print(f"  dropped {dropped} classes under {args.min_area_km2} km² (use --min-area-km2 0 to disable)")
+        total_by_class = kept
+        lu_ll = lu_ll[lu_ll[cls_col].isin(total_by_class.index)].copy()
+
+    minority_ids = list(args.minority)
+    ordered = [str(c) for c in total_by_class.index]
+    lu_ll["_class"] = lu_ll[cls_col]
 
     class_defs = []
     for i, cid in enumerate(ordered):
         is_min = cid in minority_ids
-        color = MINORITY_COLOR if is_min else (OTHER_COLOR if cid == "other" else PALETTE[i % len(PALETTE)])
+        color = MINORITY_COLOR if is_min else PALETTE[i % len(PALETTE)]
         class_defs.append({
             "id": cid,
-            "label": LABELS.get(cid, cid),
+            "label": label_for(cid),
             "color": color,
             "minority": bool(is_min),
         })
+    print(f"  {len(class_defs)} classes kept · {sum(1 for c in class_defs if c['minority'])} flagged minority")
 
     def area_block(df):
         grp = df.groupby("_class")["area_km2"].sum().reindex(ordered, fill_value=0.0)
