@@ -15,8 +15,11 @@ notebooks/anaconda_projects/
 notebooks/external/
 notebooks/_cache/
 notebooks/cache/
+notebooks/__pycache__/
+**/__pycache__/
 *.ckpt
 *.joblib
+*.pyc
 
 # pipeline data — large shapefiles + cached rasters + model dumps live under
 # <repo>/data. Each teammate copies their own shapefile into data/ following
