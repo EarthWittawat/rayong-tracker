@@ -100,19 +100,21 @@ export default function Page() {
   const profile = session.profile;
 
   return (
-    <main className="min-h-screen pb-24">
-      <header className="sticky top-0 z-[1100] border-b border-border bg-bg/85 backdrop-blur-xl">
+    <main className="min-h-screen">
+      <header className="nasa-nav sticky top-0 z-[1100]">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">
           <div className="min-w-0 flex items-center gap-3">
             <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-xl shrink-0"
-              style={{ background: "rgb(var(--c-accent) / 0.12)" }}
+              className="relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ring-2 ring-white/85"
+              style={{ background: "linear-gradient(135deg, rgb(var(--c-info)) 0%, rgb(var(--c-accent)) 100%)" }}
+              title="Mission patch"
             >
-              🌾
+              <span className="text-[10px] font-bold tracking-wider text-white">RYG</span>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[rgb(var(--c-accent))] ring-2 ring-[rgb(var(--c-nav-bg))]" />
             </div>
-            <div className="min-w-0">
-              <h1 className="text-base font-semibold text-ink truncate leading-tight">Rayong Crop Tracker</h1>
-              <p className="text-[11px] text-muted2 tabular truncate">Data · SR · GenAI · Features · RF</p>
+            <div className="min-w-0 leading-tight">
+              <div className="eyebrow text-[10px] nav-muted">Mission · Rayong / Sentinel-2</div>
+              <h1 className="text-base font-bold nav-ink truncate">Rayong Crop Tracker</h1>
             </div>
           </div>
 
@@ -124,14 +126,14 @@ export default function Page() {
                 onEditMe={() => setShowIdentity(true)}
               />
             )}
-            <span className={`hidden sm:inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border tabular ${live ? "border-good/30 text-good bg-good/5" : "border-warn/30 text-warn bg-warn/5"}`}>
+            <span className={`hidden sm:inline-flex items-center gap-1.5 text-[10px] eyebrow px-2.5 py-1 rounded-sm border tabular ${live ? "border-good/60 text-good bg-good/10" : "border-warn/60 text-warn bg-warn/10"}`}>
               <span className={`w-1.5 h-1.5 rounded-full ${live ? "bg-good" : "bg-warn"} pulse-soft`} />
-              {live ? "live" : "offline"}
+              {live ? "live link" : "offline"}
             </span>
             <ThemeToggle />
             <button
               onClick={handleAdd}
-              className="hidden md:inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-md bg-ink text-bg hover:opacity-90 transition-opacity font-medium"
+              className="hidden md:inline-flex items-center gap-1.5 text-[11px] eyebrow px-3 py-2 rounded-sm bg-[rgb(var(--c-accent))] text-white hover:brightness-110 transition-all"
               title="Add a manual member"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -141,8 +143,8 @@ export default function Page() {
               <button
                 onClick={() => setMenuOpen(o => !o)}
                 onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
-                className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-sm border-2"
-                style={{ background: `${profile.color}1A`, color: profile.color, borderColor: profile.color }}
+                className="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-sm ring-2 ring-white/80 hover:ring-white transition-all"
+                style={{ background: `${profile.color}33`, color: profile.color }}
                 title={`Signed in as ${profile.name}`}
               >
                 {profile.avatar_url ? (
@@ -153,11 +155,11 @@ export default function Page() {
               </button>
               {menuOpen && (
                 <div
-                  className="absolute right-0 mt-1.5 w-52 bg-surface border border-border rounded-lg shadow-cardHover py-1 z-[1200]"
+                  className="absolute right-0 mt-1.5 w-52 bg-surface border border-border rounded-md shadow-cardHover py-1 z-[1200]"
                   onMouseDown={(e) => e.preventDefault()}
                 >
                   <div className="px-3 py-2 border-b border-border">
-                    <div className="text-sm font-medium text-ink truncate">{profile.name}</div>
+                    <div className="text-sm font-semibold text-ink truncate">{profile.name}</div>
                     <div className="text-[11px] text-muted2 truncate">{profile.email ?? ""}</div>
                   </div>
                   <button
@@ -177,6 +179,8 @@ export default function Page() {
             </div>
           </div>
         </div>
+        {/* red mission stripe */}
+        <div className="h-[3px] w-full bg-[rgb(var(--c-accent))]" />
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
@@ -263,12 +267,32 @@ export default function Page() {
           </div>
         </section>
 
-        <footer className="text-xs text-muted2 pt-4 border-t border-border flex flex-wrap items-center gap-2">
-          <span>Edits sync in real-time via Supabase.</span>
-          <span className="text-border2">·</span>
-          <span>Imagery © Esri, Maxar, Earthstar Geographics</span>
-        </footer>
       </div>
+
+      <footer className="nasa-nav mt-12">
+        <div className="h-[3px] w-full bg-[rgb(var(--c-accent))]" />
+        <div className="max-w-7xl mx-auto px-6 py-6 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+          <div>
+            <div className="eyebrow text-[10px] nav-muted mb-1">Mission</div>
+            <div className="nav-ink font-semibold">Rayong Crop Tracker</div>
+            <p className="nav-muted mt-1 leading-relaxed">
+              Edits sync in real time via Supabase. Map imagery © Esri, Maxar, Earthstar Geographics.
+            </p>
+          </div>
+          <div>
+            <div className="eyebrow text-[10px] nav-muted mb-1">Pipeline</div>
+            <div className="nav-ink tabular">Sentinel-2 L2A → SR ×4 → GenAI → Features → RF</div>
+          </div>
+          <div>
+            <div className="eyebrow text-[10px] nav-muted mb-1">Data sources</div>
+            <ul className="nav-muted space-y-0.5">
+              <li>CDSE OpenEO (Sentinel-2)</li>
+              <li>LDD landuse shapefile</li>
+              <li>OpenSR / DiffusionSat (SR + GenAI)</li>
+            </ul>
+          </div>
+        </div>
+      </footer>
 
       {undo && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[1300] bg-ink text-bg text-sm px-4 py-2.5 rounded-lg shadow-cardHover flex items-center gap-3">
