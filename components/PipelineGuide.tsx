@@ -19,15 +19,15 @@ type GuideEntry = {
 const GUIDE: Record<StageKey, GuideEntry> = {
   data: {
     emoji: "🛰️",
-    tagline: "Pull Sentinel-2 L2A monthly composites for the AOI.",
+    tagline: "Sentinel-2 L2A monthly composites for the AOI.",
     what:
-      "We query CDSE openEO for Sentinel-2 Level-2A scenes over the Rayong bounding box, then build a cloud-masked monthly median composite. Bands B02 / B03 / B04 / B08 stay at 10 m; B05–B07, B8A, B11, B12 are kept at their native 20 m and bilinearly upsampled later. SCL classes 3 / 8 / 9 / 10 (cloud-shadow, mid + high cloud, cirrus) are masked out before the temporal median.",
+      "CDSE openEO query over the Rayong bbox. SCL classes 3 / 8 / 9 / 10 (cloud-shadow, mid + high cloud, cirrus) masked, then monthly median. 10 m bands (B02 / B03 / B04 / B08) kept at native; 20 m bands kept and bilinearly upsampled when used.",
     why:
-      "Monthly medians cut clouds and sensor noise without losing the seasonal signal that crop classifiers depend on. Working in reflectance keeps the spectra radiometrically comparable across months — important for indices like NDVI later.",
+      "Monthly medians cut clouds without losing seasonality. Reflectance scale keeps spectra comparable across months for NDVI etc.",
     completion:
-      "One GeoTIFF per month written to `cache/s2_monthly/<aoi>/`. 'done' = cloud-free months successfully downloaded; 'total' = months requested (typically 12).",
-    inputs: "Rayong AOI bbox · time window (yyyy-mm-dd → yyyy-mm-dd) · max cloud cover 85%",
-    outputs: "GeoTIFFs · 10 m grid · 10 spectral bands × N months",
+      "One GeoTIFF per month in `cache/s2_monthly/<aoi>/`. done = months successfully fetched; total = months requested.",
+    inputs: "AOI bbox · time window · max cloud cover 85 %",
+    outputs: "GeoTIFFs · 10 m · 10 bands × N months",
     tools: [
       { name: "CDSE openEO", url: "https://openeo.dataspace.copernicus.eu/" },
       { name: "rasterio + rioxarray", url: "https://corteva.github.io/rioxarray/" },
@@ -35,66 +35,65 @@ const GUIDE: Record<StageKey, GuideEntry> = {
   },
   sr: {
     emoji: "🔬",
-    tagline: "Super-resolve 10 m → 2.5 m with the OpenSR latent diffusion model.",
+    tagline: "Super-resolve 10 m → 2.5 m with OpenSR latent diffusion.",
     what:
-      "Each monthly composite is run through `opensr_model.SRLatentDiffusion`. The model takes 4-channel inputs (B02 / B03 / B04 / B08), denoises in latent space, and outputs a 4× upsampled reflectance image. 20 m bands are bilinearly upsampled afterward because the SR model wasn't trained on them — running them through would add noise.",
+      "`opensr_model.SRLatentDiffusion` on B02 / B03 / B04 / B08. 4× upsample in latent space, reflectance out. 20 m bands not run through the model — bilinear upsample only.",
     why:
-      "10 m pixels alias narrow fields (typical Rayong plot widths are 5–15 m). 2.5 m gives Random Forest features something to grip on, especially for narrow rubber rows, bunds, and orchard headlands.",
+      "10 m pixels alias narrow Rayong fields (5–15 m). 2.5 m gives RF features something to grip on for rubber rows, bunds, orchard headlands.",
     completion:
-      "One SR GeoTIFF per month in `cache/s2_sr/<aoi>/`. 'done' = SR tiles successfully persisted on disk; 'total' = same as the Data stage.",
+      "One SR GeoTIFF per month in `cache/s2_sr/<aoi>/`. done = SR tiles persisted; total = same as Data.",
     inputs: "Monthly composites · 10 m · B02 / B03 / B04 / B08",
     outputs: "SR GeoTIFFs · 2.5 m · same band order",
     tools: [
       { name: "opensr-model", url: "https://github.com/ESAOpenSR/opensr-model" },
-      { name: "OmegaConf config loader", url: "https://omegaconf.readthedocs.io/" },
+      { name: "OmegaConf", url: "https://omegaconf.readthedocs.io/" },
     ],
   },
   gen: {
     emoji: "✨",
-    tagline: "Synthesize minority-class patches to balance the training set.",
+    tagline: "Synthesise minority-class patches.",
     what:
-      "Some Rayong crop classes have <1 % of pixels (specific orchards, palm-under-cover). Plain oversampling just duplicates noise, so we try two generative paths: (a) inject LoRA adapters into the OpenSR UNet and fine-tune per minority class on real SR patches, (b) sample from DiffusionSat with class conditioning. FID against a held-out real-class set is the sanity check.",
+      "Some Rayong classes hold <1 % of pixels. Base SR diffusion is seeded with real LR minority patches + noise in LR space; output 2.5 m patches feed extra rows into the pixel table. LoRA fine-tuning is gated off (opensr-ldsrs2 is latent — the pixel-space loop crashed; needs a latent rewrite).",
     why:
-      "Class imbalance is the #1 failure mode for landuse Random Forest. Generative augmentation feeds the classifier realistic synthetic minority pixels without distorting the spectral distribution the way SMOTE does.",
+      "Pure oversampling duplicates noise. Diffusion-sampled patches give the RF realistic minority spectra without skewing the distribution the way SMOTE does.",
     completion:
-      "LoRA adapter (~10 MB) + ~200 synthetic patches per minority class. 'done' = minority classes with a trained adapter and a viable FID; 'total' = `len(CFG.minority_classes)`.",
-    inputs: "SR patches of each minority class · ~200 real patches per class",
-    outputs: "LoRA weights · synthetic 2.5 m patches · per-class FID report",
+      "~200 synthetic patches per minority class under `cache/synth/<class>/`. done = classes with patches written; total = `len(CFG.minority_classes)`.",
+    inputs: "Real SR patches per minority class (≥ 100 each)",
+    outputs: ".npy + RGB .png per patch · feature rows appended to pixel_table",
     tools: [
+      { name: "opensr-model", url: "https://github.com/ESAOpenSR/opensr-model" },
       { name: "peft (LoRA)", url: "https://huggingface.co/docs/peft/" },
-      { name: "DiffusionSat", url: "https://github.com/samar-khanna/DiffusionSat" },
     ],
   },
   feat: {
     emoji: "🧮",
-    tagline: "Extract per-pixel features from SR + landuse labels.",
+    tagline: "Per-pixel features from SR + landuse labels.",
     what:
-      "Rasterize the LDD landuse shapefile onto the SR grid to get a per-pixel `LU_CODE`. For every labeled pixel we compute monthly temporal statistics (mean / std / min / max per band), vegetation indices (NDVI, NDWI, EVI), and GLCM + LBP texture descriptors from a small neighborhood window.",
+      "Rasterise the LDD shapefile onto the SR grid for per-pixel `LU_CODE`. For each labelled pixel: monthly mean/std/min/max/p90 per band + NDVI / NDWI + GLCM/LBP texture in a small window. Synth rows from GenAI concatenated in the same DataFrame.",
     why:
-      "Crop classes separate poorly on raw bands but well on temporal + texture features. Including phenology across months lets Random Forest tell rubber from cassava without an explicit time-series model.",
+      "Raw bands separate crops poorly; monthly stats + texture capture phenology. RF gets a flat tabular view without a time-series model.",
     completion:
-      "A `pixel_table.parquet` file with one row per training pixel. 'done' = rows written (rounded to thousands); 'total' = target pixel budget.",
-    inputs: "SR stack · LDD landuse shapefile · `LU_CODE` column",
-    outputs: "pixel_table.parquet · ~40 features per pixel",
+      "`pixel_table.parquet` (or .pkl fallback) written. done = rows written; total = target pixel budget.",
+    inputs: "SR stack · LDD landuse shapefile · `LU_CODE`",
+    outputs: "pixel_table · ~25 features per pixel",
     tools: [
-      { name: "rasterio.features.rasterize", url: "https://rasterio.readthedocs.io/en/stable/topics/features.html" },
+      { name: "rasterio.features", url: "https://rasterio.readthedocs.io/en/stable/topics/features.html" },
       { name: "scikit-image (GLCM, LBP)", url: "https://scikit-image.org/" },
     ],
   },
   rf: {
     emoji: "🌳",
-    tagline: "Train a Random Forest cascade per-pixel.",
+    tagline: "Random Forest cascade per-pixel.",
     what:
-      "Stage-1 Random Forest classifies every pixel into one of the `LU_CODE` classes. A second-stage RF is trained on the minority cohort only; pixels where stage-1 confidence < 0.6 — or where stage-1 picks a dominant class but the feature vector is close to a minority centroid — are routed to stage-2 for a sharper decision.",
+      "Stage-1 RF over all `LU_CODE` classes. Stage-2 RF trained on minority pixels only. Samples route to stage-2 when stage-1 confidence < 0.6 or it predicts a non-minority class.",
     why:
-      "A single RF tends to drop borderline minority pixels into dominant classes. The cascade preserves minority recall without sacrificing dominant-class precision, and is faster to retrain than swapping in a deep model.",
+      "Single RF drops borderline minority pixels into dominant classes. Cascade keeps minority recall without hurting dominant precision.",
     completion:
-      "Stage-1 + stage-2 models dumped as joblib pickles. 'done' = 1 per model trained + persisted; 'total' = 2.",
-    inputs: "pixel_table.parquet · train / val split (stratified by class)",
-    outputs: "rf_stage1.joblib · rf_stage2_minor.joblib · confusion matrix · feature importance plot",
+      "Stage-1 + stage-2 dumped as joblib pickles. done = models persisted; total = 2.",
+    inputs: "pixel_table · train/val split stratified by class",
+    outputs: "rf_stage1.joblib · rf_stage2_minor.joblib · confusion matrix · feature importance",
     tools: [
       { name: "scikit-learn RandomForestClassifier", url: "https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html" },
-      { name: "imbalanced-learn", url: "https://imbalanced-learn.org/" },
     ],
   },
 };
@@ -118,9 +117,9 @@ export function PipelineGuide({ tasks }: { tasks: Task[] }) {
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <div className="text-[11px] uppercase tracking-[0.12em] text-muted2 font-medium">Pipeline guide</div>
-            <h2 className="text-lg font-semibold text-ink mt-0.5">How crops get classified, stage by stage</h2>
+            <h2 className="text-lg font-semibold text-ink mt-0.5">Stages, inputs, outputs</h2>
             <p className="text-xs text-muted mt-1 max-w-2xl">
-              Click a stage to read what happens in it, why it matters, and what &ldquo;done&rdquo; looks like for the team board. Progress numbers reflect the current state of all member cards.
+              Click a stage for what it does and what &ldquo;done&rdquo; means. Numbers track the current board state.
             </p>
           </div>
           <a
@@ -175,7 +174,7 @@ export function PipelineGuide({ tasks }: { tasks: Task[] }) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div className="md:col-span-2 space-y-4">
             <div>
-              <div className="text-[10px] eyebrow text-muted2">Stage {activeIdx + 1} of {STAGES.length} · {activeStage.short}</div>
+              <div className="text-[10px] eyebrow text-muted2">{activeStage.short} · stage {activeIdx + 1}/{STAGES.length}</div>
               <h3 className="text-xl font-semibold text-ink mt-0.5 flex items-center gap-2">
                 <span className="text-2xl" aria-hidden>{g.emoji}</span>
                 {activeStage.label}

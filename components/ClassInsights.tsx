@@ -53,8 +53,7 @@ export function ClassInsights() {
             <div className="text-[11px] uppercase tracking-[0.12em] text-muted2 font-medium">Class distribution</div>
             <h2 className="text-lg font-semibold text-ink mt-0.5">Landuse balance per area</h2>
             <p className="text-xs text-muted mt-1 max-w-2xl">
-              Per-area breakdown of LDD landuse classes. Use this to spot class imbalance before training.
-              Gini ≈ 0 = balanced, ≈ 1 = one class dominates.
+              Per-area LDD class share. Gini ≈ 0 balanced, ≈ 1 one class dominates.
             </p>
           </div>
           <div className="text-[10px] text-muted2 tabular text-right">
@@ -251,7 +250,7 @@ function EmptyState() {
             and commit <code className="bg-surface2 px-1 rounded">public/class-stats.json</code> to enable this panel.
           </p>
           <p className="text-[11px] text-muted2 mt-2">
-            The export computes per-quadrant + per-S2-tile class shares, Gini, Shannon entropy, and a minority-class flag — all derived from the LDD landuse shapefile.
+            Per-quadrant + per-S2-tile shares, Gini, Shannon entropy, minority flag — from the LDD shapefile.
           </p>
         </div>
       </div>

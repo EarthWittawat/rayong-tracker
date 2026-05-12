@@ -345,7 +345,7 @@ function BoardCard({
               <button
                 onClick={(e) => { e.stopPropagation(); onOpen(); }}
                 className="ml-auto text-[10px] h-7 px-2 rounded border border-info/30 text-info hover:bg-info/5 inline-flex items-center gap-1"
-                title="Open the member card to access comments and full controls"
+                title="Open member card · comments + full controls"
               >
                 full details
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17l10-10M17 7H7v10" /></svg>

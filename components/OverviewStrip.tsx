@@ -32,7 +32,7 @@ export function OverviewStrip({ members, tasks }: { members: Member[]; tasks: Ta
               Overall progress
               <span
                 className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border border-border text-[9px] text-muted2 cursor-help"
-                title="Weighted = total tiles done / total tiles. Stage-avg = mean of per-stage ratios. Stage-avg gives small stages equal weight to large ones."
+                title="Weighted = Σ done / Σ total. Stage-avg = mean of per-stage ratios (small + large stages weighted equally)."
               >?</span>
             </div>
             <div className="flex items-baseline gap-3 mt-2">

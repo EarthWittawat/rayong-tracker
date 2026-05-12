@@ -55,7 +55,7 @@ export function AccessGate({
           Signed in as <code className="bg-black/30 px-1.5 py-0.5 rounded text-white/90">{email}</code>
         </p>
         <p className="text-xs text-white/55 max-w-sm mx-auto mt-2">
-          A teammate generated a one-time code in <strong>Manage access</strong>. Paste it below to join the dashboard.
+          Ask a teammate to generate a code in <strong>Manage access</strong>.
         </p>
 
         <form

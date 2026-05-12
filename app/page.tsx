@@ -347,7 +347,6 @@ export default function Page() {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" /></svg>
             Insights
           </a>
-          <span className="ml-auto text-[10px] eyebrow text-muted2 hidden sm:inline">two sections · scroll or jump</span>
         </div>
       </nav>
 
@@ -357,10 +356,9 @@ export default function Page() {
         <div id="work" className="scroll-mt-32 space-y-6">
           <header className="flex items-end justify-between gap-3 flex-wrap pb-2 border-b border-border">
             <div>
-              <div className="eyebrow text-[10px] text-muted2">Section 1 of 2</div>
-              <h2 className="text-2xl font-bold text-ink mt-0.5">Work</h2>
+              <h2 className="text-2xl font-bold text-ink">Work</h2>
               <p className="text-xs text-muted mt-1 max-w-xl">
-                Overall progress, the crew board, and the map. Edits save as you go.
+                Progress, crew board, map.
               </p>
             </div>
             <a href="#insights" className="text-[11px] text-muted hover:text-ink inline-flex items-center gap-1">
@@ -559,7 +557,7 @@ export default function Page() {
                 <div className="text-[11px] uppercase tracking-[0.12em] text-muted2 font-medium">Province map</div>
                 <h2 className="text-lg font-semibold text-ink mt-0.5">Rayong · Sentinel-2 AOI</h2>
                 <p className="text-xs text-muted mt-1 max-w-xl">
-                  Satellite imagery. Click anywhere to read lat/lng + MGRS for the notebook. Draw a rectangle to export a bounding box.
+                  Click for lat/lng + MGRS. Draw a rectangle to export a bbox.
                 </p>
               </div>
               {focusId && (
@@ -579,10 +577,9 @@ export default function Page() {
         <div id="insights" className="scroll-mt-32 space-y-6">
           <header className="flex items-end justify-between gap-3 flex-wrap pb-2 border-b border-border">
             <div>
-              <div className="eyebrow text-[10px] text-muted2">Section 2 of 2</div>
-              <h2 className="text-2xl font-bold text-ink mt-0.5">Insights</h2>
+              <h2 className="text-2xl font-bold text-ink">Insights</h2>
               <p className="text-xs text-muted mt-1 max-w-xl">
-                Read-only context — the pipeline explainer and the class-distribution snapshot exported from the notebook. Use these to onboard new teammates or audit class imbalance before training.
+                Pipeline explainer + class-distribution snapshot from the notebook.
               </p>
             </div>
             <a href="#work" className="text-[11px] text-muted hover:text-ink inline-flex items-center gap-1">
@@ -653,7 +650,7 @@ export default function Page() {
             <span className="w-1 h-1 rounded-full bg-white/30" />
             <span>LDD landuse</span>
             <span className="w-1 h-1 rounded-full bg-white/30" />
-            <span>OpenSR · DiffusionSat</span>
+            <span>OpenSR ×4</span>
             <span className="w-1 h-1 rounded-full bg-white/30" />
             <span>Esri · Maxar imagery</span>
             <span className="ml-auto">SynthCrop · v1.0</span>

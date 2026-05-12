@@ -55,7 +55,7 @@ export function LoginGate({
 
         <h1 className="text-3xl font-bold text-white">SynthCrop Progress Tracker</h1>
         <p className="text-sm text-white/70 mt-2 mb-8 max-w-sm mx-auto">
-          Team board for the Sentinel-2 crop-mapping pipeline. Sign in with Google to join.
+          Team board · Sentinel-2 crop-mapping pipeline.
         </p>
 
         <div className="bg-[rgb(var(--c-nav-bg2))]/85 backdrop-blur-md border border-[rgb(var(--c-nav-border))] rounded-md p-5 text-left">
@@ -82,7 +82,7 @@ export function LoginGate({
           {error && <p className="text-xs text-[rgb(var(--c-accent))] mt-3">{error}</p>}
 
           <p className="text-[10px] text-white/50 mt-4 leading-relaxed">
-            By signing in you let the board show your Google display name + avatar to teammates. No email is sent anywhere.
+            Sign-in shares your Google name + avatar with teammates. No email is sent.
           </p>
         </div>
 

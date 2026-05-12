@@ -6,7 +6,7 @@ export type Quadrant = "NW" | "NE" | "SW" | "SE" | "ALL";
 export const STAGES: { key: StageKey; label: string; short: string; hint: string }[] = [
   { key: "data", label: "Data acquisition",       short: "Data",  hint: "Sentinel-2 L2A · SCL clean · monthly median" },
   { key: "sr",   label: "Super-resolution ×4",    short: "SR",    hint: "OpenSR latent diffusion · 10m → 2.5m" },
-  { key: "gen",  label: "Generative augmentation", short: "GenAI", hint: "LoRA-adapted SEN2SR · minority classes" },
+  { key: "gen",  label: "Generative augmentation", short: "GenAI", hint: "Diffusion-sampled · minority classes" },
   { key: "feat", label: "Feature extraction",     short: "Feat",  hint: "Rasterize · indices · GLCM/LBP texture" },
   { key: "rf",   label: "Random Forest",          short: "RF",    hint: "Per-pixel training · cascade classifier" },
 ];
