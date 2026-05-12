@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/useStore";
 import { useSession, useAllProfiles } from "@/lib/auth";
 import { OverviewStrip } from "@/components/OverviewStrip";
@@ -12,6 +12,7 @@ import { ActivityFeed } from "@/components/ActivityFeed";
 import { LoginGate } from "@/components/LoginGate";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ClassInsights } from "@/components/ClassInsights";
+import { BoardView } from "@/components/BoardView";
 import { computeProgress } from "@/lib/progress";
 import { isLive } from "@/lib/supabase";
 import type { Member } from "@/lib/supabase";
@@ -42,6 +43,18 @@ export default function Page() {
   const [quadFilter, setQuadFilter] = useState<"all" | "NW" | "NE" | "SW" | "SE" | "ALL">("all");
   const [incompleteOnly, setIncompleteOnly] = useState(false);
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
+  const [view, setView] = useState<"board" | "list">("board");
+
+  // Persist the view toggle.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const v = window.localStorage.getItem("rayong-view");
+    if (v === "board" || v === "list") setView(v);
+  }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("rayong-view", view);
+  }, [view]);
 
   const lastActiveByMember = useMemo(() => {
     const m = new Map<string, number>();
@@ -296,6 +309,28 @@ export default function Page() {
             </button>
 
             <div className="ml-auto flex items-center gap-2">
+              <div className="inline-flex items-center rounded-md border border-border bg-surface2 p-0.5" role="tablist" aria-label="view mode">
+                <button
+                  onClick={() => setView("board")}
+                  role="tab"
+                  aria-selected={view === "board"}
+                  className={`text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${view === "board" ? "bg-ink text-bg" : "text-muted hover:text-ink"}`}
+                  title="Kanban board"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="10" rx="1" /><rect x="17" y="4" width="4" height="13" rx="1" /></svg>
+                  board
+                </button>
+                <button
+                  onClick={() => setView("list")}
+                  role="tab"
+                  aria-selected={view === "list"}
+                  className={`text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded transition-colors ${view === "list" ? "bg-ink text-bg" : "text-muted hover:text-ink"}`}
+                  title="Detail list"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+                  list
+                </button>
+              </div>
               <label className="inline-flex items-center gap-2 text-[11px] text-muted2">
                 sort
                 <select
@@ -310,54 +345,72 @@ export default function Page() {
                   <option value="name">name (A→Z)</option>
                 </select>
               </label>
-              <button
-                onClick={() => setAllExpanded(prev => prev === false ? true : false)}
-                className="text-[11px] px-2.5 py-1.5 rounded-md border border-border text-muted hover:text-ink hover:bg-surface2"
-                title={allExpanded === false ? "expand all" : "collapse all"}
-              >{allExpanded === false ? "expand all" : "collapse all"}</button>
+              {view === "list" && (
+                <button
+                  onClick={() => setAllExpanded(prev => prev === false ? true : false)}
+                  className="text-[11px] px-2.5 py-1.5 rounded-md border border-border text-muted hover:text-ink hover:bg-surface2"
+                  title={allExpanded === false ? "expand all" : "collapse all"}
+                >{allExpanded === false ? "expand all" : "collapse all"}</button>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {filteredMembers.map(({ m }) => (
-              <MemberCard
-                key={m.id}
-                member={m}
-                tasks={tasks.filter(t => t.member_id === m.id)}
-                focused={focusId === m.id}
-                onFocus={() => setFocusId(prev => prev === m.id ? null : m.id)}
-                onPatchTask={updateTask}
-                onPatchMember={(patch) => updateMember(m.id, patch)}
-                onRemove={() => handleRemove(m)}
-                saveStates={saveStates}
-                editing={editing}
-                profile={profile}
-                profiles={profiles}
-                lastActiveAt={lastActiveByMember.get(m.id)}
-                expanded={allExpanded}
-              />
-            ))}
-            {filteredMembers.length === 0 && members.length > 0 && (
-              <div className="col-span-full text-center py-10 rounded-xl2 border-2 border-dashed border-border">
-                <div className="text-sm text-ink font-medium">No crew matches the filters</div>
-                <button
-                  onClick={() => { setQuery(""); setQuadFilter("all"); setIncompleteOnly(false); }}
-                  className="mt-3 text-xs px-3 py-1.5 rounded-md border border-border text-muted hover:text-ink hover:bg-surface2"
-                >reset filters</button>
-              </div>
-            )}
-            {members.length === 0 && (
-              <div className="col-span-full text-center py-12 rounded-xl2 border-2 border-dashed border-border">
-                <div className="text-3xl mb-2">🛰️</div>
-                <div className="text-sm text-ink font-medium">No crew yet</div>
-                <div className="text-xs text-muted2 mt-1 mb-4">Crew rows are added automatically when teammates sign in.</div>
-                <button
-                  onClick={handleAdd}
-                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-ink text-bg hover:opacity-90 transition-opacity"
-                >+ add manual member</button>
-              </div>
-            )}
-          </div>
+          {filteredMembers.length === 0 && members.length > 0 && (
+            <div className="text-center py-10 rounded-xl2 border-2 border-dashed border-border">
+              <div className="text-sm text-ink font-medium">No crew matches the filters</div>
+              <button
+                onClick={() => { setQuery(""); setQuadFilter("all"); setIncompleteOnly(false); }}
+                className="mt-3 text-xs px-3 py-1.5 rounded-md border border-border text-muted hover:text-ink hover:bg-surface2"
+              >reset filters</button>
+            </div>
+          )}
+
+          {members.length === 0 && (
+            <div className="text-center py-12 rounded-xl2 border-2 border-dashed border-border">
+              <div className="text-3xl mb-2">🛰️</div>
+              <div className="text-sm text-ink font-medium">No crew yet</div>
+              <div className="text-xs text-muted2 mt-1 mb-4">Crew rows are added automatically when teammates sign in.</div>
+              <button
+                onClick={handleAdd}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-ink text-bg hover:opacity-90 transition-opacity"
+              >+ add manual member</button>
+            </div>
+          )}
+
+          {filteredMembers.length > 0 && view === "board" && (
+            <BoardView
+              members={filteredMembers}
+              tasks={tasks}
+              saveStates={saveStates}
+              editing={editing}
+              onPatchTask={updateTask}
+              onFocusMember={(id) => { setView("list"); setFocusId(id); setAllExpanded(true); setTimeout(() => { document.getElementById(`member-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); }}
+            />
+          )}
+
+          {filteredMembers.length > 0 && view === "list" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {filteredMembers.map(({ m }) => (
+                <div id={`member-${m.id}`} key={m.id} className="scroll-mt-24">
+                  <MemberCard
+                    member={m}
+                    tasks={tasks.filter(t => t.member_id === m.id)}
+                    focused={focusId === m.id}
+                    onFocus={() => setFocusId(prev => prev === m.id ? null : m.id)}
+                    onPatchTask={updateTask}
+                    onPatchMember={(patch) => updateMember(m.id, patch)}
+                    onRemove={() => handleRemove(m)}
+                    saveStates={saveStates}
+                    editing={editing}
+                    profile={profile}
+                    profiles={profiles}
+                    lastActiveAt={lastActiveByMember.get(m.id)}
+                    expanded={allExpanded}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
       </div>
