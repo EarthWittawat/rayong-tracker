@@ -4,20 +4,45 @@
 
 ## Stages
 
-| § | Stage  | Topic                                                                                |
-| - | ------ | ------------------------------------------------------------------------------------ |
-| 1 | —      | imports, `Config` dataclass, quadrant-AOI resolution, GPU check                      |
-| 2 | Data   | CDSE openEO · Sentinel-2 L2A monthly median with SCL cloud masking                   |
-| 3 | SR     | OpenSR latent diffusion ×4 (10 m → 2.5 m) on B02 / B03 / B04 / B08                   |
-| 4 | GenAI  | minority-class synthesis · 4a LoRA-fine-tuned SEN2SR · 4b DiffusionSat               |
-| 5 | —      | full-AOI + zoom + monthly strip + per-band reflectance histograms                    |
-| 6 | Feat   | LDD landuse → rasterise on SR grid → per-class patch extraction                      |
-| 7 | Feat   | pixel table: temporal band stats + NDVI / NDWI / EVI + GLCM / LBP texture            |
-| 8 | RF     | stage-1 Random Forest + minority-focused cascade · classification report + figures   |
-| 9 | —      | mapping notebook outputs back to tracker-board `done / total` counts                 |
-| 10| —      | export `public/class-stats.json` for the website's Class Distribution panel          |
+| §   | Stage  | Topic                                                                              |
+| --- | ------ | ---------------------------------------------------------------------------------- |
+| 1   | —      | imports, `Config` dataclass, TAXONOMY (15 classes), quadrant-AOI resolution        |
+| 2   | Data   | CDSE openEO · Sentinel-2 L2A monthly median with SCL cloud masking                 |
+| 3   | SR     | OpenSR latent diffusion ×4 (10 m → 2.5 m) on B02 / B03 / B04 / B08                 |
+| 4   | —      | native-vs-SR side-by-side + zoom + monthly strip + reflectance histograms          |
+| 5   | Feat   | LDD landuse → 15-class raster on SR grid → per-class patch extraction              |
+| 6   | GenAI  | base SR diffusion sampler seeded by real LR patches; DSAT path is a separate env   |
+| 6.1 | —      | RGB / false-colour NIR / NDVI grid of synthetic patches per minority class         |
+| 7   | Feat   | pixel table: monthly stats + NDVI / NDWI · synth rows concatenated                 |
+| 8   | RF     | stage-1 RF + minority-focused stage-2 cascade · classification report + figures    |
+| 9   | —      | mapping notebook outputs back to tracker-board `done / total` counts               |
+| 10  | —      | export `public/class-stats.json` for the website's Class Distribution panel        |
 
-GPU recommended for §3 and §4a. CPU-only is fine for §6–§8.
+GPU recommended for §3 and §6. CPU-only is fine for §5, §7, §8.
+
+### Taxonomy
+
+The notebook collapses raw LDD `LU_CODE` values into 15 buckets defined by `TAXONOMY` in §1:
+
+| # | Class       | Default LDD codes |
+| - | ----------- | ----------------- |
+| 1 | Rice        | A101              |
+| 2 | Cassava     | A201              |
+| 3 | Pineapple   | A202              |
+| 4 | Para rubber | A301              |
+| 5 | Oil palm    | A302              |
+| 6 | Durian      | A401              |
+| 7 | Mango       | A402              |
+| 8 | Jackfruit   | A403              |
+| 9 | Coconut     | A303              |
+| 10| Mangosteen  | A404              |
+| 11| Longan      | A405              |
+| 12| Rambutan    | A406              |
+| 13| Langsat     | A407              |
+| 14| Reservoir   | W201 / W101       |
+| 15| Others      | (catch-all)       |
+
+Adjust the code lists in `TAXONOMY` if your LDD layer uses different codes — anything that doesn't match falls into **Others**.
 
 ## Environment
 
@@ -37,11 +62,22 @@ Refresh after editing the env file:
 conda env update -f environment.yml --prune
 ```
 
-DiffusionSat is not on PyPI — clone once if you intend to run §4b:
+### DiffusionSat (optional, separate env)
+
+DSAT pins `diffusers==0.18.2` / `huggingface_hub==0.16.4`, which conflicts with the main `synthcrop` env. Use a dedicated env:
 
 ```bash
-git clone https://github.com/samar-khanna/DiffusionSat.git ../external/DiffusionSat
+conda env create -f environment-diffusionsat.yml
+conda activate synthcrop-dsat
+
+# one-time: clone the DSAT repo next to this folder
+git clone https://github.com/samar-khanna/DiffusionSat.git external/DiffusionSat
+
+# sample synthetic patches per minority class into cache/synth/<class>/
+python diffusionsat_synth.py --classes Durian Langsat Rambutan --n 200
 ```
+
+The script writes `.npy` + RGB `.png` files in the same layout the base-SR sampler uses, so §6.1 in `pipeline.ipynb` picks them up automatically on the next render.
 
 ## Data
 
