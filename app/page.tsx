@@ -290,35 +290,42 @@ export default function Page() {
         <div className="h-[3px] w-full bg-[rgb(var(--c-accent))]" />
       </header>
 
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* in-page sub-nav: jumps to Work or Insights */}
+      <nav className="sticky top-[57px] z-[1099] border-b border-border bg-bg/85 backdrop-blur-md">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-1 text-xs overflow-x-auto">
+          <a href="#work" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-surface text-ink font-medium hover:bg-surface2 transition-colors whitespace-nowrap">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg>
+            Work
+          </a>
+          <a href="#insights" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-surface text-ink font-medium hover:bg-surface2 transition-colors whitespace-nowrap">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" /></svg>
+            Insights
+          </a>
+          <span className="ml-auto text-[10px] eyebrow text-muted2 hidden sm:inline">two sections · scroll or jump</span>
+        </div>
+      </nav>
 
-        <OverviewStrip members={members} tasks={tasks} />
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
 
-        <PipelineGuide tasks={tasks} />
-
-        <section className="rounded-xl2 bg-surface border border-border shadow-card overflow-hidden">
-          <div className="px-6 pt-5 pb-3 flex items-start justify-between gap-3 flex-wrap border-b border-border">
+        {/* ──────────────────────────── WORK ──────────────────────────── */}
+        <div id="work" className="scroll-mt-32 space-y-6">
+          <header className="flex items-end justify-between gap-3 flex-wrap pb-2 border-b border-border">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.12em] text-muted2 font-medium">Province map</div>
-              <h2 className="text-lg font-semibold text-ink mt-0.5">Rayong · Sentinel-2 AOI</h2>
+              <div className="eyebrow text-[10px] text-muted2">Section 1 of 2</div>
+              <h2 className="text-2xl font-bold text-ink mt-0.5">Work</h2>
               <p className="text-xs text-muted mt-1 max-w-xl">
-                Satellite imagery. Click anywhere to read lat/lng + MGRS for the notebook. Draw a rectangle to export a bounding box.
+                The live operating surface — overall progress, the crew board, and the map. Everything here writes back to Supabase in real time.
               </p>
             </div>
-            {focusId && (
-              <button onClick={() => setFocusId(null)} className="text-xs text-muted hover:text-ink px-2 py-1 rounded border border-border hover:bg-surface2 transition-colors">
-                clear focus
-              </button>
-            )}
-          </div>
-          <div className="p-5">
-            <RayongMap members={members} tasks={tasks} focusId={focusId} onFocus={setFocusId} />
-          </div>
-        </section>
+            <a href="#insights" className="text-[11px] text-muted hover:text-ink inline-flex items-center gap-1">
+              jump to Insights
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+            </a>
+          </header>
 
-        <ClassInsights />
+          <OverviewStrip members={members} tasks={tasks} />
 
-        <section className="space-y-4">
+          <section className="space-y-4">
           <div className="flex items-end justify-between gap-3 flex-wrap">
             <div>
               <div className="text-[11px] uppercase tracking-[0.12em] text-muted2 font-medium">Team</div>
@@ -481,6 +488,50 @@ export default function Page() {
             </div>
           )}
         </section>
+
+          <section className="rounded-xl2 bg-surface border border-border shadow-card overflow-hidden">
+            <div className="px-6 pt-5 pb-3 flex items-start justify-between gap-3 flex-wrap border-b border-border">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.12em] text-muted2 font-medium">Province map</div>
+                <h2 className="text-lg font-semibold text-ink mt-0.5">Rayong · Sentinel-2 AOI</h2>
+                <p className="text-xs text-muted mt-1 max-w-xl">
+                  Satellite imagery. Click anywhere to read lat/lng + MGRS for the notebook. Draw a rectangle to export a bounding box.
+                </p>
+              </div>
+              {focusId && (
+                <button onClick={() => setFocusId(null)} className="text-xs text-muted hover:text-ink px-2 py-1 rounded border border-border hover:bg-surface2 transition-colors">
+                  clear focus
+                </button>
+              )}
+            </div>
+            <div className="p-5">
+              <RayongMap members={members} tasks={tasks} focusId={focusId} onFocus={setFocusId} />
+            </div>
+          </section>
+        </div>
+        {/* ──────────────────────── /WORK ──────────────────────── */}
+
+        {/* ────────────────────── INSIGHTS ────────────────────── */}
+        <div id="insights" className="scroll-mt-32 space-y-6">
+          <header className="flex items-end justify-between gap-3 flex-wrap pb-2 border-b border-border">
+            <div>
+              <div className="eyebrow text-[10px] text-muted2">Section 2 of 2</div>
+              <h2 className="text-2xl font-bold text-ink mt-0.5">Insights</h2>
+              <p className="text-xs text-muted mt-1 max-w-xl">
+                Read-only context — the pipeline explainer and the class-distribution snapshot exported from the notebook. Use these to onboard new teammates or audit class imbalance before training.
+              </p>
+            </div>
+            <a href="#work" className="text-[11px] text-muted hover:text-ink inline-flex items-center gap-1">
+              back to Work
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: "rotate(180deg)" }}><polyline points="6 9 12 15 18 9" /></svg>
+            </a>
+          </header>
+
+          <PipelineGuide tasks={tasks} />
+
+          <ClassInsights />
+        </div>
+        {/* ──────────────────────── /INSIGHTS ──────────────────────── */}
 
       </div>
 
