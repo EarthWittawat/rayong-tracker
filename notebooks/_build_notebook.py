@@ -367,24 +367,92 @@ def sample_diffusionsat(class_name: str, n: int = 8, lat: float = 12.75, lng: fl
 ''')
 
 # === 5 · visualise ==========================================================
-md("""## 5 · Native vs SR""")
+md("""## 5 · Native vs SR
+
+Three views:
+
+1. Full AOI side-by-side at native 10 m and super-resolved 2.5 m.
+2. Zoomed-in crop so the per-pixel detail gain is obvious.
+3. SR thumbnail strip across all months (cloud-mask + temporal coherence check).
+""")
 
 code(r'''def to_rgb(arr: np.ndarray, gain: float = 3.0) -> np.ndarray:
-    rgb = np.clip(arr[[2,1,0]] * gain, 0, 1)
-    return (rgb.transpose(1,2,0) * 255).astype("uint8")
+    """Reflectance (4, H, W) → uint8 RGB (H, W, 3). Band order: B02 B03 B04 B08."""
+    rgb = np.clip(arr[[2, 1, 0]] * gain, 0, 1)
+    return (rgb.transpose(1, 2, 0) * 255).astype("uint8")
 
 
 mid = S2.time.values[len(S2.time)//2]
-native = S2.sel(time=mid).isel(band_idx=slice(0,4)).values / 10000.0
+native = S2.sel(time=mid).isel(band_idx=slice(0, 4)).values / 10000.0
 sr_now = SR.sel(time=mid).values
 
-fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-ax[0].imshow(to_rgb(native)); ax[0].set_title("Native 10 m"); ax[0].axis("off")
-ax[1].imshow(to_rgb(sr_now)); ax[1].set_title("SR 2.5 m"); ax[1].axis("off")
-plt.suptitle(f"{CFG.aoi_name} · {pd.to_datetime(mid).strftime('%Y-%m')}")
+fig, ax = plt.subplots(1, 2, figsize=(11, 5.5))
+ax[0].imshow(to_rgb(native)); ax[0].set_title(f"Native 10 m · {native.shape[2]}×{native.shape[1]} px"); ax[0].axis("off")
+ax[1].imshow(to_rgb(sr_now)); ax[1].set_title(f"SR 2.5 m · {sr_now.shape[2]}×{sr_now.shape[1]} px"); ax[1].axis("off")
+plt.suptitle(f"{CFG.aoi_name} · {pd.to_datetime(mid).strftime('%Y-%m')} · full AOI")
 plt.tight_layout()
-plt.savefig(CFG.out_root / "figs" / "native_vs_sr.png", dpi=160, bbox_inches="tight")
+plt.savefig(CFG.out_root / "figs" / "native_vs_sr_full.png", dpi=160, bbox_inches="tight")
 plt.show()
+''')
+
+code(r'''# zoomed crop: take a 64×64 native window (= 256×256 SR), centred on AOI.
+H10, W10 = native.shape[1:]
+cy, cx = H10 // 2, W10 // 2
+win = 32
+nat_crop = native[:, cy-win:cy+win, cx-win:cx+win]
+sr_crop  = sr_now[:, cy*CFG.sr_scale - win*CFG.sr_scale: cy*CFG.sr_scale + win*CFG.sr_scale,
+                     cx*CFG.sr_scale - win*CFG.sr_scale: cx*CFG.sr_scale + win*CFG.sr_scale]
+
+fig, ax = plt.subplots(1, 2, figsize=(11, 5.5))
+# nearest-neighbour resize the native crop to match SR pixel count, so the eye
+# compares like-for-like instead of being fooled by the smaller native canvas.
+ax[0].imshow(to_rgb(nat_crop), interpolation="nearest")
+ax[0].set_title(f"Native 10 m · {nat_crop.shape[2]}×{nat_crop.shape[1]} px (nearest)")
+ax[0].axis("off")
+ax[1].imshow(to_rgb(sr_crop))
+ax[1].set_title(f"SR 2.5 m · {sr_crop.shape[2]}×{sr_crop.shape[1]} px")
+ax[1].axis("off")
+plt.suptitle(f"{CFG.aoi_name} · {pd.to_datetime(mid).strftime('%Y-%m')} · centre crop")
+plt.tight_layout()
+plt.savefig(CFG.out_root / "figs" / "native_vs_sr_crop.png", dpi=160, bbox_inches="tight")
+plt.show()
+''')
+
+code(r'''# Monthly SR strip — quick eyeball check that the cloud mask + median worked.
+n_t = len(SR.time)
+cols = min(n_t, 6)
+rows = math.ceil(n_t / cols)
+fig, axes = plt.subplots(rows, cols, figsize=(2.2 * cols, 2.4 * rows))
+axes = np.atleast_1d(axes).ravel()
+for ax in axes: ax.axis("off")
+for i, t in enumerate(SR.time.values):
+    axes[i].imshow(to_rgb(SR.sel(time=t).values))
+    axes[i].set_title(pd.to_datetime(t).strftime("%Y-%m"), fontsize=9)
+plt.suptitle(f"SR monthly composites · {CFG.aoi_name}")
+plt.tight_layout()
+plt.savefig(CFG.out_root / "figs" / "sr_monthly_strip.png", dpi=160, bbox_inches="tight")
+plt.show()
+''')
+
+code(r'''# Reflectance histogram per band — sanity check that SR didn't drift the
+# distribution. Native + SR should land in the same shape; an extreme tail
+# shift means the SR model is leaking into out-of-distribution territory.
+fig, axes = plt.subplots(1, 4, figsize=(14, 3), sharey=True)
+bands = ["B02", "B03", "B04", "B08"]
+for i, ax in enumerate(axes):
+    ax.hist(native[i].ravel(),  bins=60, alpha=0.55, label="native 10 m", color="#5B8B7C")
+    ax.hist(sr_now[i].ravel(),  bins=60, alpha=0.55, label="SR 2.5 m",    color="#C96442")
+    ax.set_title(bands[i]); ax.set_xlabel("reflectance")
+axes[0].set_ylabel("pixels"); axes[0].legend(fontsize=8)
+plt.suptitle(f"Band-wise reflectance histograms · {pd.to_datetime(mid).strftime('%Y-%m')}")
+plt.tight_layout()
+plt.savefig(CFG.out_root / "figs" / "sr_band_histograms.png", dpi=160, bbox_inches="tight")
+plt.show()
+
+# numeric summary
+print(f"{'band':>5}  {'native μ':>10}  {'SR μ':>10}  {'native σ':>10}  {'SR σ':>10}")
+for i, b in enumerate(bands):
+    print(f"{b:>5}  {native[i].mean():>10.4f}  {sr_now[i].mean():>10.4f}  {native[i].std():>10.4f}  {sr_now[i].std():>10.4f}")
 ''')
 
 # === 6 · landuse rasterise ==================================================
