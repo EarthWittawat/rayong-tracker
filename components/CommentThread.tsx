@@ -28,7 +28,33 @@ export function CommentThread({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  function startEdit(c: CommentRow) {
+    setEditingId(c.id);
+    setEditDraft(c.body);
+  }
+  function cancelEdit() {
+    setEditingId(null);
+    setEditDraft("");
+  }
+  async function saveEdit(c: CommentRow) {
+    if (editBusy) return;
+    setEditBusy(true);
+    try {
+      await editComment(c.id, editDraft, profiles);
+      cancelEdit();
+    } finally {
+      setEditBusy(false);
+    }
+  }
+  async function handleDelete(c: CommentRow) {
+    if (!confirm("Delete this comment?")) return;
+    await deleteComment(c.id);
+  }
 
   const profileById = useMemo(() => {
     const m: Record<string, Profile> = {};
@@ -111,15 +137,81 @@ export function CommentThread({
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[11px] flex items-center gap-2">
+                <div className="text-[11px] flex items-center gap-2 group/row">
                   <span className="font-medium" style={{ color: author?.color }}>{author?.name ?? "unknown"}</span>
                   <span className="text-muted2 tabular">{relTime(c.created_at)}</span>
                   {c.edited_at && <span className="text-muted2 text-[10px]">edited</span>}
-                  {isMine && <CommentMenu c={c} onEdit={editComment} onDelete={deleteComment} profiles={profiles} />}
+                  {isMine && editingId !== c.id && (
+                    <span className="ml-auto inline-flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(c)}
+                        title="Edit comment"
+                        aria-label="Edit"
+                        className="w-6 h-6 rounded hover:bg-surface2 text-muted hover:text-ink inline-flex items-center justify-center"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4L16.5 3.5z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(c)}
+                        title="Delete comment"
+                        aria-label="Delete"
+                        className="w-6 h-6 rounded hover:bg-crit/10 text-muted hover:text-crit inline-flex items-center justify-center"
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                        </svg>
+                      </button>
+                    </span>
+                  )}
                 </div>
-                <div className="text-sm text-ink whitespace-pre-wrap break-words"
-                     dangerouslySetInnerHTML={{ __html: renderCommentBody(c, profiles) }} />
-                {atts.length > 0 && (
+
+                {editingId === c.id ? (
+                  <div className="mt-1.5 rounded-md border border-border bg-surface2/60 p-2">
+                    <textarea
+                      autoFocus
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
+                        else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveEdit(c); }
+                      }}
+                      rows={2}
+                      className="w-full text-sm bg-surface border border-border rounded p-2 text-ink outline-none focus:border-accent resize-y"
+                      placeholder="Edit comment…"
+                    />
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-muted2">
+                        <kbd className="px-1 rounded bg-surface border border-border tabular text-[9px]">⌘/Ctrl+↵</kbd> save · <kbd className="px-1 rounded bg-surface border border-border tabular text-[9px]">Esc</kbd> cancel
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          className="text-[11px] px-2 py-1 rounded border border-border text-muted hover:text-ink hover:bg-surface2"
+                        >Cancel</button>
+                        <button
+                          type="button"
+                          onClick={() => saveEdit(c)}
+                          disabled={editBusy || editDraft.trim() === c.body.trim() || !editDraft.trim()}
+                          className="text-[11px] px-2 py-1 rounded bg-ink text-bg font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                        >{editBusy ? "saving…" : "Save"}</button>
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-ink whitespace-pre-wrap break-words"
+                       dangerouslySetInnerHTML={{ __html: renderCommentBody(c, profiles) }} />
+                )}
+
+                {atts.length > 0 && editingId !== c.id && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {atts.map(a => (
                       <AttachmentChip
@@ -183,42 +275,6 @@ export function CommentThread({
         {error && <div className="text-[11px] text-crit">{error}</div>}
       </div>
     </div>
-  );
-}
-
-function CommentMenu({
-  c, onEdit, onDelete, profiles,
-}: {
-  c: CommentRow;
-  onEdit: (id: string, body: string, profiles: Profile[]) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-  profiles: Profile[];
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(c.body);
-
-  if (editing) {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <button onClick={async () => { await onEdit(c.id, draft, profiles); setEditing(false); }}
-                className="text-[10px] text-info hover:underline">save</button>
-        <button onClick={() => { setDraft(c.body); setEditing(false); }}
-                className="text-[10px] text-muted hover:text-ink">cancel</button>
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          className="absolute left-0 right-0 mt-1 z-10 bg-surface border border-border rounded-md p-2 text-xs"
-          rows={3}
-        />
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-muted2">
-      <button onClick={() => setEditing(true)} className="hover:text-ink">edit</button>
-      <button onClick={() => { if (confirm("Delete this comment?")) onDelete(c.id); }}
-              className="hover:text-crit">delete</button>
-    </span>
   );
 }
 
