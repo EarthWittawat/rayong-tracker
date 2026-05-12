@@ -301,14 +301,24 @@ export function useIssueIndex(): IssueLite[] {
   const [items, setItems] = useState<IssueLite[]>([]);
   useEffect(() => {
     const sb = getSupabase();
-    if (!sb) return;
+    if (!sb) {
+      console.warn("[useIssueIndex] Supabase client unavailable — #picker will be empty");
+      return;
+    }
     let alive = true;
     async function refresh() {
-      const { data } = await sb!
+      const { data, error } = await sb!
         .from("issues")
         .select("number,title,status")
         .order("number", { ascending: false });
-      if (alive) setItems((data as IssueLite[]) ?? []);
+      if (!alive) return;
+      if (error) {
+        console.warn("[useIssueIndex] fetch failed:", error.message,
+          "— did you apply supabase/migrations/20260513120000_issues.sql?");
+        setItems([]);
+        return;
+      }
+      setItems((data as IssueLite[]) ?? []);
     }
     refresh();
     const ch = sb.channel("issues-index")

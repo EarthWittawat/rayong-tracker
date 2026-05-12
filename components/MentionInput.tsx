@@ -60,21 +60,22 @@ export function MentionInput({
       return;
     }
 
-    if (issues && issues.length > 0) {
-      const ires = issueTrigger(value, cur, issues);
-      if (ires.active && ires.suggestions.length > 0) {
-        setHint(prev => {
-          const keep = prev && prev.kind === "issue" && prev.start === ires.start ? prev : null;
-          return {
-            kind: "issue",
-            start: ires.start,
-            query: ires.query,
-            suggestions: ires.suggestions,
-            selected: keep ? Math.min(keep.selected, ires.suggestions.length - 1) : 0,
-          };
-        });
-        return;
-      }
+    // Always evaluate the # trigger — even when `issues` is undefined or
+    // empty — so the picker can render a "no matching issue" hint and
+    // the user gets visible feedback that the trigger fires.
+    const ires = issueTrigger(value, cur, issues ?? []);
+    if (ires.active) {
+      setHint(prev => {
+        const keep = prev && prev.kind === "issue" && prev.start === ires.start ? prev : null;
+        return {
+          kind: "issue",
+          start: ires.start,
+          query: ires.query,
+          suggestions: ires.suggestions,
+          selected: keep ? Math.min(keep.selected, Math.max(0, ires.suggestions.length - 1)) : 0,
+        };
+      });
+      return;
     }
 
     setHint(null);
@@ -86,7 +87,7 @@ export function MentionInput({
   }, [value, profiles, issues]);
 
   function acceptSuggestion(idx: number) {
-    if (!hint) return;
+    if (!hint || hint.suggestions.length === 0) return;
     const before = value.slice(0, hint.start);
     const after = value.slice(hint.start + 1 + hint.query.length);
     let insertion: string;
@@ -110,7 +111,7 @@ export function MentionInput({
   }
 
   function onKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (hint) {
+    if (hint && hint.suggestions.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setHint(h => h ? ({ ...h, selected: (h.selected + 1) % h.suggestions.length } as Hint) : h);
@@ -126,8 +127,8 @@ export function MentionInput({
         acceptSuggestion(hint.selected);
         return;
       }
-      if (e.key === "Escape") { e.preventDefault(); setHint(null); return; }
     }
+    if (hint && e.key === "Escape") { e.preventDefault(); setHint(null); return; }
     if (onSubmit && e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       onSubmit();
@@ -171,26 +172,31 @@ export function MentionInput({
       )}
       {hint && hint.kind === "issue" && (
         <div className="absolute z-20 mt-1 left-0 bg-surface border border-border rounded-md shadow-cardHover py-1 min-w-[16rem] max-w-[24rem]">
-          {hint.suggestions.map((i, idx) => {
-            const closed = i.status === "closed";
-            return (
-              <button
-                key={i.number}
-                onMouseDown={(e) => { e.preventDefault(); acceptSuggestion(idx); }}
-                className={`w-full flex items-center gap-2 text-left px-2 py-1.5 text-xs ${idx === hint.selected ? "bg-surface2" : "hover:bg-surface2"}`}
-                title={i.title}
-              >
-                <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${closed ? "bg-muted2" : "bg-good"}`}
-                  title={closed ? "closed" : "open"}
-                />
-                <span className="tabular text-accent2 font-medium shrink-0">#{i.number}</span>
-                <span className={`truncate ${closed ? "text-muted2 line-through" : "text-ink"}`}>{i.title}</span>
-              </button>
-            );
-          })}
-          {hint.suggestions.length === 0 && (
-            <div className="px-2 py-1.5 text-[11px] text-muted2 italic">no matching issue</div>
+          {hint.suggestions.length === 0 ? (
+            <div className="px-3 py-2 text-[11px] text-muted2">
+              {issues && issues.length > 0
+                ? <>no issue matches <code className="bg-surface2 px-1 rounded">#{hint.query}</code></>
+                : <>no issues yet — open one at <a href="/issues" className="text-info hover:underline">/issues</a></>}
+            </div>
+          ) : (
+            hint.suggestions.map((i, idx) => {
+              const closed = i.status === "closed";
+              return (
+                <button
+                  key={i.number}
+                  onMouseDown={(e) => { e.preventDefault(); acceptSuggestion(idx); }}
+                  className={`w-full flex items-center gap-2 text-left px-2 py-1.5 text-xs ${idx === hint.selected ? "bg-surface2" : "hover:bg-surface2"}`}
+                  title={i.title}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${closed ? "bg-muted2" : "bg-good"}`}
+                    title={closed ? "closed" : "open"}
+                  />
+                  <span className="tabular text-accent2 font-medium shrink-0">#{i.number}</span>
+                  <span className={`truncate ${closed ? "text-muted2 line-through" : "text-ink"}`}>{i.title}</span>
+                </button>
+              );
+            })
           )}
         </div>
       )}

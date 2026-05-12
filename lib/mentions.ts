@@ -143,26 +143,32 @@ export type IssueIndexItem = {
 
 // Find suggestions while user is typing `#partial`. Returns the active
 // token (substring after the last "#" before cursor) plus matching issues.
+// Stays active even when `issues` is empty so the dropdown can render a
+// "no matching issue" hint — otherwise users typing `#` see nothing and
+// assume the picker is broken.
 export function issueTrigger(text: string, cursor: number, issues: IssueIndexItem[]): {
   active: boolean;
   query: string;
   start: number;
   suggestions: IssueIndexItem[];
 } {
-  if (issues.length === 0) return { active: false, query: "", start: -1, suggestions: [] };
   const left = text.slice(0, cursor);
   const hashIdx = left.lastIndexOf("#");
   if (hashIdx < 0) return { active: false, query: "", start: -1, suggestions: [] };
   const prev = hashIdx > 0 ? left[hashIdx - 1] : " ";
   if (!/\s|[(,;:]/.test(prev) && hashIdx !== 0) return { active: false, query: "", start: -1, suggestions: [] };
-  const query = left.slice(hashIdx + 1);
-  if (query.length > 60 || /\n/.test(query)) return { active: false, query: "", start: -1, suggestions: [] };
+  // Issue refs can't contain whitespace — once the user types a space
+  // after `#`, the ref is finalised and the picker closes.
+  const tail = left.slice(hashIdx + 1);
+  if (/\s/.test(tail) || tail.length > 30) {
+    return { active: false, query: "", start: -1, suggestions: [] };
+  }
 
-  const q = query.trim().toLowerCase();
-  // Empty `#` shows the latest issues; digits filter by prefix; words filter by title substring.
+  const query = tail;
+  const q = query.toLowerCase();
   let suggestions: IssueIndexItem[];
   if (q.length === 0) {
-    suggestions = issues.slice(0, 6);
+    suggestions = issues.slice(0, 6);                     // newest 6
   } else if (/^\d+$/.test(q)) {
     suggestions = issues.filter(i => String(i.number).startsWith(q)).slice(0, 6);
   } else {
