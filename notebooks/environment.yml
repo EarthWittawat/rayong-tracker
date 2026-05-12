@@ -1,0 +1,70 @@
+name: rayong-tracker
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12   # opensr-model requires Python >= 3.12
+  - pip
+
+  # ----- core scientific stack -----
+  - numpy
+  - pandas
+  - matplotlib
+  - seaborn
+  - tqdm
+  - pyarrow
+  - scikit-learn
+  - scikit-image
+  - imbalanced-learn
+  - joblib
+
+  # ----- geospatial (conda-forge gives a clean GDAL chain on Windows) -----
+  - gdal
+  - geopandas
+  - shapely
+  - pyproj
+  - fiona
+  - rasterio
+  - rioxarray
+  - xarray
+  - dask
+  - netcdf4
+
+  # ----- notebook -----
+  - jupyterlab
+  - ipykernel
+  - ipywidgets
+
+  - pip:
+      # CDSE / STAC clients
+      - openeo
+      - "openeo-processes-dask[implementations]"
+      - pystac-client
+      - planetary-computer
+
+      # MGRS / Sentinel-2 tile helpers
+      - mgrs
+
+      # super-resolution + diffusion
+      - opensr-model
+      - opensr-test
+      - sen2sr
+      - omegaconf       # used to load the opensr-model 10 m config
+      - diffusers
+      - transformers
+      - accelerate
+      - peft
+      - safetensors
+
+      # FID metric
+      - torchmetrics[image]
+
+      # ---------------------------------------------------------------
+      # PyTorch with CUDA 12.1. Swap the index URL if your driver is
+      # CUDA 11.8 (`cu118`) or you only have CPU (`cpu`).
+      # See: https://pytorch.org/get-started/locally/
+      # ---------------------------------------------------------------
+      - --extra-index-url https://download.pytorch.org/whl/cu121
+      - "torch>=2.2"
+      - torchvision
+      - torchaudio

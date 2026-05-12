@@ -138,8 +138,7 @@ class Config:
     scl_band: str   = "SCL"
 
     # SR
-    sr_scale:       int   = 4              # 10 m → 2.5 m
-    sr_model_id:    str   = "isp-uv-es/SEN2SR-LDM"  # huggingface
+    sr_scale:       int   = 4              # 10 m → 2.5 m (opensr-model is fixed at 4×)
 
     # generative aug
     diffusionsat_repo: Path = Path("D:/Github/genai-tracker/external/DiffusionSat")
@@ -265,11 +264,13 @@ S2 = load_s2_stack(S2_DIR)
 # ============================================================================
 md("""## 3 · OpenSR · super-resolution ×4 (10 m → 2.5 m)
 
-We use the **OpenSR latent diffusion model** (`SEN2SR-LDM`, [ISP-UV/SEN2SR](https://github.com/IPL-UV/sen2sr)) — currently the cleanest SR pipeline tuned for Sentinel-2 RGB+NIR bands. The model:
+We use the **OpenSR latent diffusion model** ([ESAOpenSR/opensr-model](https://github.com/ESAOpenSR/opensr-model)) — a Sentinel-2-tuned latent diffusion SR pipeline. The model:
 
 - 4× spatial upsampling: 10 m → 2.5 m.
-- Conditioned on **B02/B03/B04/B08** at native S2 res.
+- Conditioned on **B02 / B03 / B04 / B08** at native S2 res, in that order.
 - Outputs reflectance, not just RGB — keeps things radiometrically sensible.
+
+Requires **Python ≥ 3.12** and an OmegaConf YAML config (the canonical one is hosted in the package's GitHub repo and loaded lazily on first call).
 
 Notes:
 
@@ -277,24 +278,44 @@ Notes:
 - We deliberately keep the 20 m red-edge + SWIR bands at native res and *attach* them post-SR by bilinear upsampling. Diffusion SR isn't trained on them; pushing them through would be noise.
 """)
 
-code(r'''from opensr_model import SEN2SR  # pip install opensr-model
+code(r'''# Real opensr-model API (pip install opensr-model). The package exposes a
+# single SRLatentDiffusion class; the old `from opensr_model import SEN2SR`
+# import does not exist and will raise ImportError.
+import opensr_model
+from omegaconf import OmegaConf
+from io import StringIO
+import requests
 
-# Lazy-loaded singleton
+_SR_CONFIG_URL = "https://raw.githubusercontent.com/ESAOpenSR/opensr-model/refs/heads/main/opensr_model/configs/config_10m.yaml"
 _SR_MODEL = None
+_SR_CFG   = None
+
+def _load_sr_config():
+    """Load the canonical 10 m S2 config from the upstream repo."""
+    text = requests.get(_SR_CONFIG_URL, timeout=30).text
+    return OmegaConf.load(StringIO(text))
+
 def get_sr_model():
-    global _SR_MODEL
+    """Lazy singleton — instantiates SRLatentDiffusion on the first call."""
+    global _SR_MODEL, _SR_CFG
     if _SR_MODEL is None:
-        _SR_MODEL = SEN2SR.from_pretrained(CFG.sr_model_id).to(DEVICE).eval()
-        print("loaded:", CFG.sr_model_id)
+        _SR_CFG = _load_sr_config()
+        _SR_MODEL = opensr_model.SRLatentDiffusion(_SR_CFG, device=DEVICE)
+        _SR_MODEL.load_pretrained(_SR_CFG.ckpt_version)
+        _SR_MODEL.eval()
+        print("loaded opensr-model · ckpt:", _SR_CFG.ckpt_version)
     return _SR_MODEL
 ''')
 
 code(r'''@torch.no_grad()
-def super_resolve_month(month_arr: xr.DataArray, tile: int = 256, overlap: int = 32) -> xr.DataArray:
-    """Run SEN2SR on a single monthly composite. Tiled to keep VRAM bounded.
+def super_resolve_month(month_arr: xr.DataArray, tile: int = 128, overlap: int = 32, sampling_steps: int = 100) -> xr.DataArray:
+    """Run the OpenSR latent-diffusion model on a single monthly composite.
 
-    month_arr: (band_idx, y, x) — B02,B03,B04,B08 must be present (first 4 by default).
-    Returns 4×-resolution DataArray with the same band order.
+    Tiled to keep VRAM bounded. The model expects 4-channel input shaped
+    (B, 4, 128, 128) and returns (B, 4, 512, 512) — i.e. exactly 4× upsampled.
+
+    month_arr: (band_idx, y, x) — B02, B03, B04, B08 must be the first 4 bands.
+    Returns 4×-resolution DataArray with the same 4-band order.
     """
     model = get_sr_model()
     rgb_nir = month_arr.isel(band_idx=slice(0, 4)).values.astype("float32") / 10000.0  # reflectance scale
@@ -306,10 +327,17 @@ def super_resolve_month(month_arr: xr.DataArray, tile: int = 256, overlap: int =
     for y in range(0, H, step):
         for x in range(0, W, step):
             patch = rgb_nir[:, y:y+tile, x:x+tile]
-            if patch.shape[1] < 16 or patch.shape[2] < 16:
+            # The 4× SR pipeline is trained on 128×128 patches; pad short edges.
+            ph, pw = patch.shape[1], patch.shape[2]
+            if ph < 16 or pw < 16:
                 continue
+            if ph < tile or pw < tile:
+                pad = np.zeros((C, tile, tile), dtype="float32")
+                pad[:, :ph, :pw] = patch
+                patch = pad
             t = torch.from_numpy(patch).unsqueeze(0).to(DEVICE)
-            sr = model.super_resolve(t).squeeze(0).cpu().numpy()
+            sr = model.forward(t, sampling_steps=sampling_steps).squeeze(0).cpu().numpy()
+            sr = sr[:, : ph * CFG.sr_scale, : pw * CFG.sr_scale]
             ys, xs = y * CFG.sr_scale, x * CFG.sr_scale
             ye, xe = ys + sr.shape[1], xs + sr.shape[2]
             out[:, ys:ye, xs:xe] += sr
@@ -374,16 +402,36 @@ code(r'''from peft import LoraConfig, get_peft_model
 import torch.nn as nn
 import torch.nn.functional as F
 
+def _find_unet(model):
+    """opensr-model exposes the UNet under different attribute paths between releases.
+    Walk the common candidates and return the first match — adjust if your version differs."""
+    for path in ("unet", "model.diffusion_model", "model.unet", "model.model.diffusion_model"):
+        obj = model
+        try:
+            for part in path.split("."):
+                obj = getattr(obj, part)
+            return obj, path
+        except AttributeError:
+            continue
+    raise AttributeError("Could not locate UNet inside SRLatentDiffusion — inspect dir(model) and patch _find_unet().")
+
 def build_lora_sr(class_code: str):
-    """Wrap SEN2SR's UNet with a LoRA adapter for one minority class."""
+    """Inject LoRA adapters into the diffusion UNet for one minority class."""
     base = get_sr_model()
+    unet, path = _find_unet(base)
     lora = LoraConfig(
         r=8, lora_alpha=16,
         target_modules=["to_q", "to_k", "to_v", "to_out.0"],
         lora_dropout=0.0, bias="none",
     )
-    base.unet = get_peft_model(base.unet, lora)
-    print(f"LoRA params for {class_code}:", sum(p.numel() for p in base.unet.parameters() if p.requires_grad))
+    wrapped = get_peft_model(unet, lora)
+    # Re-attach the LoRA-wrapped module at the same path so forward() picks it up.
+    parent = base
+    parts = path.split(".")
+    for part in parts[:-1]:
+        parent = getattr(parent, part)
+    setattr(parent, parts[-1], wrapped)
+    print(f"LoRA params for {class_code} (UNet @ {path}):", sum(p.numel() for p in wrapped.parameters() if p.requires_grad))
     return base
 
 def train_lora(class_code: str, patches: np.ndarray, epochs: int = 40, lr: float = 1e-4):
