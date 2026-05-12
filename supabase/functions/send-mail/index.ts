@@ -28,6 +28,17 @@ const APP_URL        = Deno.env.get("APP_URL") ?? "";
 const SUPABASE_URL     = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// CORS for browser invocations via supabase-js (`functions.invoke`).
+// supabase-js v2 issues a preflight OPTIONS before the POST. Without
+// these headers the preflight hits the default Deno 405 / missing CORS
+// and the browser aborts the actual POST — emails silently never fire.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, content-type, x-client-info, apikey",
+  "Access-Control-Max-Age":       "86400",
+} as const;
+
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -136,7 +147,7 @@ async function handleTaskComment(commentId: string): Promise<Response> {
     .select("id, task_id, author_id, body, mentions, created_at")
     .eq("id", commentId)
     .single();
-  if (cErr || !comment) return new Response(`comment lookup failed: ${cErr?.message}`, { status: 404 });
+  if (cErr || !comment) return plain(`comment lookup failed: ${cErr?.message}`, 404);
 
   const { data: author } = await admin.from("profiles").select("id, name").eq("id", comment.author_id).single();
   const authorName = author?.name ?? "Someone";
@@ -210,14 +221,14 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
     .select("id, issue_id, author_id, body, mentions, created_at")
     .eq("id", issueCommentId)
     .single();
-  if (cErr || !c) return new Response(`issue_comment lookup failed: ${cErr?.message}`, { status: 404 });
+  if (cErr || !c) return plain(`issue_comment lookup failed: ${cErr?.message}`, 404);
 
   const { data: issue } = await admin
     .from("issues")
     .select("id, number, title, assignee_id")
     .eq("id", c.issue_id)
     .single();
-  if (!issue) return new Response("issue not found", { status: 404 });
+  if (!issue) return plain("issue not found", 404);
 
   const { data: author } = await admin.from("profiles").select("id, name").eq("id", c.author_id).single();
   const authorName = author?.name ?? "Someone";
@@ -288,20 +299,30 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
 function json(obj: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+  });
+}
+
+function plain(body: string, status: number): Response {
+  return new Response(body, {
+    status,
+    headers: { "Content-Type": "text/plain", ...CORS_HEADERS },
   });
 }
 
 // ──────────────────────── entrypoint ────────────────────────
 
 Deno.serve(async (req: Request) => {
-  if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+  if (req.method !== "POST") return plain("method not allowed", 405);
 
   let payload: Payload;
   try {
     payload = await req.json();
   } catch {
-    return new Response("bad json", { status: 400 });
+    return plain("bad json", 400);
   }
 
   if ((payload as { comment_id?: string }).comment_id) {
@@ -310,5 +331,5 @@ Deno.serve(async (req: Request) => {
   if ((payload as { issue_comment_id?: string }).issue_comment_id) {
     return handleIssueComment((payload as { issue_comment_id: string }).issue_comment_id);
   }
-  return new Response("missing comment_id or issue_comment_id", { status: 400 });
+  return plain("missing comment_id or issue_comment_id", 400);
 });
