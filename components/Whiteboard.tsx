@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import "@excalidraw/excalidraw/index.css";
 import type { Profile } from "@/lib/auth";
 import { useWhiteboard } from "@/lib/whiteboard";
 import { WhiteboardRefPicker, type RefPick } from "./WhiteboardRefPicker";
@@ -56,12 +57,17 @@ export function Whiteboard({ slug, profile, profiles }: { slug: string; profile:
     });
   }, [scene]);
 
+  // initialData runs once on mount; subsequent remote updates flow through
+  // `excalidrawAPI.updateScene`. We deliberately DROP the persisted
+  // appState — Excalidraw is strict about its shape (zoom, viewBackground,
+  // collaborators, etc.) and a stale or partial object from Supabase can
+  // throw inside the constructor. Elements + files are stable wire types.
   const initialData = useMemo(() => {
     if (!scene) return null;
     return {
-      elements: scene.elements,
-      appState: scene.appState,
-      files: scene.files,
+      elements: Array.isArray(scene.elements) ? scene.elements : [],
+      files:    (scene.files && typeof scene.files === "object") ? scene.files : {},
+      // appState intentionally omitted — Excalidraw fills its own defaults.
     };
   }, [scene]);
 
@@ -79,29 +85,14 @@ export function Whiteboard({ slug, profile, profiles }: { slug: string; profile:
     [save],
   );
 
-  if (loading) {
-    return (
-      <div className="h-[70vh] rounded-lg border border-border bg-surface2 flex items-center justify-center text-muted text-sm">
-        loading whiteboard…
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="p-6 rounded-lg border border-crit/40 bg-crit/5 text-crit text-sm">
-        Whiteboard error: {error}
-      </div>
-    );
-  }
+  // All hooks declared above the early returns so hook order stays stable
+  // between renders (React error #310 fires if a hook lives below `return`).
   const insertRef = useCallback(async (pick: RefPick) => {
     const api = apiRef.current;
     if (!api) return;
-    // Lazy-import the helper alongside the dynamic Excalidraw bundle.
     const { convertToExcalidrawElements } = await import("@excalidraw/excalidraw");
     const app = api.getAppState();
     const zoom = app?.zoom?.value ?? 1;
-    // Place the new element near the top-left of the current viewport,
-    // offset a few pixels so it doesn't slam into a corner shape.
     const x = -(app?.scrollX ?? 0) + 60 / zoom;
     const y = -(app?.scrollY ?? 0) + 60 / zoom;
     const created = convertToExcalidrawElements([
@@ -118,6 +109,20 @@ export function Whiteboard({ slug, profile, profiles }: { slug: string; profile:
     api.updateScene({ elements: [...api.getSceneElements(), ...created] });
   }, []);
 
+  if (loading) {
+    return (
+      <div className="h-[70vh] rounded-lg border border-border bg-surface2 flex items-center justify-center text-muted text-sm">
+        loading whiteboard…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="p-6 rounded-lg border border-crit/40 bg-crit/5 text-crit text-sm">
+        Whiteboard error: {error}
+      </div>
+    );
+  }
   if (!initialData) return null;
 
   return (
