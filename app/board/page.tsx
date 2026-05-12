@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "@/lib/auth";
+import { useSession, useAllProfiles } from "@/lib/auth";
 import { LoginGate } from "@/components/LoginGate";
 import { AccessGate } from "@/components/AccessGate";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -11,6 +11,7 @@ import { isLive } from "@/lib/supabase";
 export default function BoardPage() {
   const supaConfigured = isLive();
   const session = useSession();
+  const profiles = useAllProfiles(!!session.user);
 
   if (session.loading) {
     return <div className="min-h-screen flex items-center justify-center text-muted"><span className="text-sm">loading…</span></div>;
@@ -49,7 +50,7 @@ export default function BoardPage() {
             <p className="text-xs text-muted mt-1">Shared sketch space. Strokes sync to teammates after a short debounce.</p>
           </div>
         </div>
-        <Whiteboard slug="main" profile={session.profile} />
+        <Whiteboard slug="main" profile={session.profile} profiles={profiles} />
       </div>
     </main>
   );

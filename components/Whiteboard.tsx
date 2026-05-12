@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { Profile } from "@/lib/auth";
 import { useWhiteboard } from "@/lib/whiteboard";
+import { WhiteboardRefPicker, type RefPick } from "./WhiteboardRefPicker";
 
 // Excalidraw is client-only + ~1.5 MB. Lazy-load so the rest of the app
 // doesn't pay the bundle.
@@ -21,9 +22,13 @@ const Excalidraw = dynamic(
 
 type ExcalidrawAPI = {
   updateScene: (scene: { elements?: unknown[]; appState?: Record<string, unknown>; files?: Record<string, unknown> }) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getSceneElements: () => readonly any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getAppState: () => any;
 };
 
-export function Whiteboard({ slug, profile }: { slug: string; profile: Profile }) {
+export function Whiteboard({ slug, profile, profiles }: { slug: string; profile: Profile; profiles: Profile[] }) {
   const { scene, loading, error, save } = useWhiteboard(slug, profile);
   const apiRef = useRef<ExcalidrawAPI | null>(null);
   const remoteAppliedAtRef = useRef<string | null>(null);
@@ -88,10 +93,35 @@ export function Whiteboard({ slug, profile }: { slug: string; profile: Profile }
       </div>
     );
   }
+  const insertRef = useCallback(async (pick: RefPick) => {
+    const api = apiRef.current;
+    if (!api) return;
+    // Lazy-import the helper alongside the dynamic Excalidraw bundle.
+    const { convertToExcalidrawElements } = await import("@excalidraw/excalidraw");
+    const app = api.getAppState();
+    const zoom = app?.zoom?.value ?? 1;
+    // Place the new element near the top-left of the current viewport,
+    // offset a few pixels so it doesn't slam into a corner shape.
+    const x = -(app?.scrollX ?? 0) + 60 / zoom;
+    const y = -(app?.scrollY ?? 0) + 60 / zoom;
+    const created = convertToExcalidrawElements([
+      {
+        type: "text",
+        x,
+        y,
+        text: pick.label,
+        fontSize: 20,
+        strokeColor: pick.color,
+        link: pick.link,
+      } as never,
+    ]);
+    api.updateScene({ elements: [...api.getSceneElements(), ...created] });
+  }, []);
+
   if (!initialData) return null;
 
   return (
-    <div className="h-[78vh] w-full rounded-lg overflow-hidden border border-border bg-surface">
+    <div className="relative h-[78vh] w-full rounded-lg overflow-hidden border border-border bg-surface">
       <Excalidraw
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         excalidrawAPI={(api: any) => { apiRef.current = api; }}
@@ -106,6 +136,7 @@ export function Whiteboard({ slug, profile }: { slug: string; profile: Profile }
           },
         }}
       />
+      <WhiteboardRefPicker profiles={profiles} onPick={insertRef} />
     </div>
   );
 }

@@ -24,6 +24,32 @@ export type WhiteboardScene = {
   updatedBy: string | null;
 };
 
+// Lightweight read-only members+tasks fetcher for the whiteboard ref
+// picker. No realtime — picker results don't need to update mid-stroke.
+export type LiteMember = { id: string; name: string; quadrant: string; color: string; emoji: string };
+export type LiteTask   = { id: string; member_id: string; stage: string };
+
+export function useMembersAndTasksLite() {
+  const [members, setMembers] = useState<LiteMember[]>([]);
+  const [tasks,   setTasks]   = useState<LiteTask[]>([]);
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb) return;
+    let alive = true;
+    (async () => {
+      const [{ data: m }, { data: t }] = await Promise.all([
+        sb.from("members").select("id,name,quadrant,color,emoji").order("created_at", { ascending: true }),
+        sb.from("tasks").select("id,member_id,stage"),
+      ]);
+      if (!alive) return;
+      setMembers((m as LiteMember[]) ?? []);
+      setTasks((t as LiteTask[]) ?? []);
+    })();
+    return () => { alive = false; };
+  }, []);
+  return { members, tasks };
+}
+
 export function useWhiteboard(slug: string, profile: Profile | null) {
   const [scene, setScene]   = useState<WhiteboardScene | null>(null);
   const [loading, setLoading] = useState(true);
