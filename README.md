@@ -18,12 +18,12 @@ The web app is the *operations side* of the project. The Jupyter notebook in `no
 
 - **Kanban board** with one column per pipeline stage and one card per (member, stage) task. Cards expand inline for `+ / −`, quick-pick increments, status pills, comment counts, and subtasks.
 - **List view** with the full member card editor: comments thread, file attachments, per-stage notes.
-- **Presence + activity feed** over Supabase Realtime — online avatars, "X editing" chips, rolling 30-event broadcast feed.
+- **Presence + activity feed** over Supabase Realtime — teammate avatars, "X editing" chips, rolling 30-event broadcast feed.
 - **Satellite map** (Leaflet + Esri World Imagery) with draw-rectangle → GeoJSON / Python bbox export, click-to-read lat/lng + MGRS, optional Sentinel-2 100 km MGRS tile overlay.
-- **Class-distribution insights** — reads `public/class-stats.json` (produced by §10 of the notebook) and renders per-quadrant + per-S2-tile class shares, Shannon entropy, Gini, and minority-class flags.
+- **Class-distribution insights** — reads `public/class-stats.json` (produced by `notebooks/export_class_stats.py` or §10 of the notebook) and renders per-quadrant + per-S2-tile class shares, Shannon entropy, Gini, and minority-class flags.
 - **Pipeline guide** — in-app stepper that documents every stage: what / why / done / inputs / outputs / tools.
-- **Live team telemetry footer** — online count, 24 h + 7 d edit counts, completion %, top contributor, lagging stage.
-- **Subtasks** — Trello-style checklists; anyone can tick, only the author can delete.
+- **Team telemetry footer** — 24 h + 7 d edit counts, completion %, top contributor, lagging stage.
+- **Subtasks** — per-task checklists; anyone can tick, only the author can delete.
 - **Comments + @mentions + Supabase Storage attachments** with email fan-out via Resend and a daily-digest Vercel Cron.
 - **Light + dark themes** with a CSS-variable palette and a force-dark navigation slab.
 
