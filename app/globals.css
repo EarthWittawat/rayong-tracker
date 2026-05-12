@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+
+html, body {
+  background: #FAF9F7;
+  color: #1F1E1B;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* numeric stability */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* claude.ai-style focus ring */
+*:focus-visible {
+  outline: 2px solid #C96442;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* subtle scroll bar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D9D5CC; border-radius: 9999px; border: 2px solid #FAF9F7; }
+::-webkit-scrollbar-thumb:hover { background: #B8B2A6; }
+
+/* progress ring keyframe — used in map quadrants */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.pulse-soft { animation: pulse-soft 2.4s ease-in-out infinite; }
+
+/* number input — remove the spinners; we use +/- buttons instead */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none; margin: 0;
+}
+input[type="number"] { -moz-appearance: textfield; }
+
+/* @mention pill rendered inside comment bodies */
+.mention {
+  background: rgba(63, 110, 151, 0.12);
+  color: #3F6E97;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-weight: 500;
+}

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl -sL \"https://api.github.com/search/code?q=Rayong+filename:geojson\" -H \"Accept: application/vnd.github.v3+json\")",
+      "Bash(curl -sL \"https://nominatim.openstreetmap.org/search?q=Rayong+province&format=geojson&polygon_geojson=1&limit=1\" -H \"User-Agent: caveman-tracker\" -o D:/Github/genai-tracker/rayong-raw.json)",
+      "Bash(node *)",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(python *)",
+      "Bash(pip install *)",
+      "Bash(PYTHONIOENCODING=utf-8 python *)"
+    ]
+  }
+}

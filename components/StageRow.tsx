@@ -1,0 +1,160 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import type { Task } from "@/lib/supabase";
+import type { SaveState, ActivityEvent } from "@/lib/useStore";
+import type { Profile } from "@/lib/auth";
+import { useTaskCommentCount } from "@/lib/comments";
+import { CommentThread } from "./CommentThread";
+
+export function StageRow({
+  task, label, short, hint, color, save, editingBy, profile, profiles, onChange,
+}: {
+  task: Task;
+  label: string;
+  short: string;
+  hint: string;
+  color: string;
+  save?: SaveState;
+  editingBy?: ActivityEvent["user"];
+  profile: Profile;
+  profiles: Profile[];
+  onChange: (patch: Partial<Task>) => void;
+}) {
+  const pct = task.total > 0 ? Math.min(100, (task.done / task.total) * 100) : 0;
+  const done = task.done;
+  const total = task.total;
+
+  const [doneBuf, setDoneBuf] = useState(String(done));
+  const [totalBuf, setTotalBuf] = useState(String(total));
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const commentCount = useTaskCommentCount(task.id);
+
+  useEffect(() => { setDoneBuf(String(done)); }, [done]);
+  useEffect(() => { setTotalBuf(String(total)); }, [total]);
+
+  function commitDone(v: string) {
+    const n = Math.max(0, Math.min(total, parseInt(v || "0", 10) || 0));
+    onChange({ done: n });
+    setDoneBuf(String(n));
+  }
+  function commitTotal(v: string) {
+    const n = Math.max(done, parseInt(v || "0", 10) || 0);
+    onChange({ total: n });
+    setTotalBuf(String(n));
+  }
+
+  const step = total >= 200 ? 10 : total >= 50 ? 5 : 1;
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    const mult = e.shiftKey ? 5 : 1;
+    if (e.key === "+" || e.key === "=" || e.key === "ArrowUp") {
+      e.preventDefault();
+      commitDone(String(Math.min(total, done + step * mult)));
+    } else if (e.key === "-" || e.key === "_" || e.key === "ArrowDown") {
+      e.preventDefault();
+      commitDone(String(Math.max(0, done - step * mult)));
+    } else if (e.key === "c" || e.key === "C" || e.key === "n" || e.key === "N") {
+      e.preventDefault();
+      setDrawerOpen(o => !o);
+    }
+  }
+
+  return (
+    <div
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className={`group py-2.5 px-3 rounded-lg outline-none transition-colors ${editingBy ? "ring-1" : "hover:bg-surface2 focus-within:bg-surface2/70 focus:bg-surface2/70"}`}
+      style={editingBy ? { boxShadow: `inset 0 0 0 1px ${editingBy.color}80`, background: `${editingBy.color}0d` } : undefined}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-lg flex items-center justify-center text-[11px] font-semibold tabular shrink-0"
+             style={{ background: `${color}14`, color }}>
+          {short}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-medium text-ink truncate">{label}</span>
+            <span className="text-xs text-muted2 truncate hidden sm:inline">· {hint}</span>
+            {editingBy && (
+              <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium"
+                    style={{ background: `${editingBy.color}1A`, color: editingBy.color, border: `1px solid ${editingBy.color}40` }}>
+                <span>{editingBy.emoji}</span>
+                {editingBy.name} editing
+              </span>
+            )}
+            {save === "saving" && <span className="w-1.5 h-1.5 rounded-full bg-muted2 pulse-soft" title="saving" />}
+            {save === "saved"  && <span className="w-1.5 h-1.5 rounded-full bg-good" title="saved" />}
+            {save === "error"  && <span className="w-1.5 h-1.5 rounded-full bg-crit" title="save failed" />}
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-surface2 overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-300"
+                 style={{ width: `${pct}%`, background: color }} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button aria-label={`comments for ${short}`}
+                  onClick={() => setDrawerOpen(o => !o)}
+                  className={`relative w-8 h-8 rounded-md border flex items-center justify-center transition-colors ${commentCount > 0 ? "border-border2 bg-surface2" : "border-border bg-surface hover:bg-surface2"}`}
+                  title={`comments (c)${commentCount ? ` · ${commentCount}` : ""}`}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={commentCount > 0 ? color : "currentColor"} strokeWidth="2"
+                 className={commentCount > 0 ? "" : "text-muted"}>
+              <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
+            </svg>
+            {commentCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-medium tabular flex items-center justify-center"
+                    style={{ background: color, color: "#FAF9F7" }}>
+                {commentCount}
+              </span>
+            )}
+          </button>
+
+          <button aria-label={`decrement ${short}`}
+                  onClick={() => commitDone(String(Math.max(0, done - step)))}
+                  className="w-8 h-8 rounded-md border border-border bg-surface hover:bg-surface2 text-muted text-sm leading-none">−</button>
+
+          <div className="flex items-center gap-0.5">
+            <input
+              type="number" inputMode="numeric"
+              className="w-12 text-right tabular text-sm bg-transparent border-0 outline-none focus:ring-0 px-0"
+              value={doneBuf}
+              onChange={(e) => setDoneBuf(e.target.value)}
+              onBlur={(e) => commitDone(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              title="tiles done"
+            />
+            <span className="text-xs text-muted2">/</span>
+            <input
+              type="number" inputMode="numeric"
+              className="w-14 text-left tabular text-sm bg-transparent border-0 outline-none focus:ring-0 px-0 text-muted"
+              value={totalBuf}
+              onChange={(e) => setTotalBuf(e.target.value)}
+              onBlur={(e) => commitTotal(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+              title="tiles total"
+            />
+          </div>
+
+          <button aria-label={`increment ${short}`}
+                  onClick={() => commitDone(String(Math.min(total, done + step)))}
+                  className="w-8 h-8 rounded-md border border-border bg-surface hover:bg-surface2 text-muted text-sm leading-none">+</button>
+
+          <div className="w-12 text-right text-sm font-semibold tabular ml-1" style={{ color }}
+               title={`${pct.toFixed(1)}% · step ${step}`}>
+            {pct.toFixed(0)}%
+          </div>
+        </div>
+      </div>
+
+      {drawerOpen && (
+        <div className="mt-3 ml-12 mr-1 pl-3 border-l-2" style={{ borderColor: `${color}40` }}>
+          <CommentThread taskId={task.id} profile={profile} profiles={profiles} />
+        </div>
+      )}
+    </div>
+  );
+}
