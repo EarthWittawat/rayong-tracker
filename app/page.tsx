@@ -349,6 +349,10 @@ export default function Page() {
             Insights
           </a>
           <IssuesNavLink />
+          <a href="/board" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-surface text-ink font-medium hover:bg-surface2 transition-colors whitespace-nowrap">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h20v14H2z" /><path d="M2 17l10 5 10-5" /></svg>
+            Whiteboard
+          </a>
         </div>
       </nav>
 

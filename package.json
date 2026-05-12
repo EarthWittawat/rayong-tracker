@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.1",
     "@supabase/supabase-js": "2.45.0",
     "leaflet": "^1.9.4",
     "leaflet-draw": "^1.0.4",
