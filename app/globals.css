@@ -106,11 +106,11 @@ input[type="number"] { -moz-appearance: textfield; }
 }
 .leaflet-control-attribution a { color: rgb(var(--c-info)) !important; }
 .leaflet-bar a {
-  background: rgb(var(--c-surface)) !important;
+  background-color: rgb(var(--c-surface)) !important;
   color: rgb(var(--c-ink)) !important;
   border-bottom: 1px solid rgb(var(--c-border)) !important;
 }
-.leaflet-bar a:hover { background: rgb(var(--c-surface2)) !important; }
+.leaflet-bar a:hover { background-color: rgb(var(--c-surface2)) !important; }
 .leaflet-tooltip,
 .leaflet-popup-content-wrapper {
   background: rgb(var(--c-surface)) !important;
