@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
-  useIssueByNumber, useIssueComments,
+  useIssueByNumber, useIssueComments, useIssueIndex,
   setIssueStatus, updateIssue, deleteIssue,
   DEFAULT_LABELS, type IssueComment,
 } from "@/lib/issues";
@@ -23,6 +23,13 @@ export function IssueDetail({
   const { issue, loading } = useIssueByNumber(number);
   const { comments, addComment, editComment, deleteComment } =
     useIssueComments(issue?.id ?? null);
+  const issueIndexAll = useIssueIndex();
+  // Strip the issue we're viewing from its own picker so #123 doesn't
+  // suggest itself when commenting on issue #123.
+  const issueIndex = useMemo(
+    () => issueIndexAll.filter(i => i.number !== number),
+    [issueIndexAll, number],
+  );
 
   const profileById = useMemo(() => {
     const m: Record<string, Profile> = {};
@@ -195,6 +202,7 @@ export function IssueDetail({
                 value={bodyDraft}
                 onChange={setBodyDraft}
                 profiles={profiles}
+                issues={issueIndex}
                 rows={6}
               />
               <div className="flex items-center justify-end gap-2">
@@ -211,6 +219,7 @@ export function IssueDetail({
               author={profileById[c.author_id]}
               profile={profile}
               profiles={profiles}
+              issues={issueIndex}
               onEdit={(body) => editComment(c.id, body, profiles)}
               onDelete={async () => {
                 if (!confirm("Delete this comment?")) return;
@@ -225,6 +234,7 @@ export function IssueDetail({
               value={draft}
               onChange={setDraft}
               profiles={profiles}
+              issues={issueIndex}
               placeholder="Write a comment. Use @ to mention, #123 to link an issue. Ctrl/⌘+Enter to send."
               onSubmit={submitComment}
               rows={3}
@@ -330,12 +340,13 @@ function CommentBlock({
 }
 
 function IssueCommentBlock({
-  comment, author, profile, profiles, onEdit, onDelete,
+  comment, author, profile, profiles, issues, onEdit, onDelete,
 }: {
   comment: IssueComment;
   author?: Profile;
   profile: Profile;
   profiles: Profile[];
+  issues?: { number: number; title: string; status?: "open" | "closed" }[];
   onEdit: (body: string) => Promise<void>;
   onDelete: () => Promise<void>;
 }) {
@@ -355,7 +366,7 @@ function IssueCommentBlock({
   if (editing) {
     return (
       <div className="rounded-xl2 border border-border bg-surface p-4 space-y-3">
-        <MentionInput value={draft} onChange={setDraft} profiles={profiles} rows={4} />
+        <MentionInput value={draft} onChange={setDraft} profiles={profiles} issues={issues} rows={4} />
         <div className="flex items-center justify-end gap-2">
           <button onClick={() => { setEditing(false); setDraft(comment.body); }} className="text-xs px-3 py-1.5 rounded-md border border-border text-muted hover:text-ink">Cancel</button>
           <button onClick={save} disabled={busy} className="text-xs px-3 py-1.5 rounded-md bg-accent text-white hover:brightness-110 disabled:opacity-50">{busy ? "saving…" : "Save"}</button>

@@ -133,6 +133,46 @@ export function renderRichHTML(body: string, profiles: Profile[]): string {
   return parts.join("");
 }
 
+// Minimal shape needed for the #issue picker so this file doesn't have
+// to circularly import from `./issues`.
+export type IssueIndexItem = {
+  number: number;
+  title: string;
+  status?: "open" | "closed";
+};
+
+// Find suggestions while user is typing `#partial`. Returns the active
+// token (substring after the last "#" before cursor) plus matching issues.
+export function issueTrigger(text: string, cursor: number, issues: IssueIndexItem[]): {
+  active: boolean;
+  query: string;
+  start: number;
+  suggestions: IssueIndexItem[];
+} {
+  if (issues.length === 0) return { active: false, query: "", start: -1, suggestions: [] };
+  const left = text.slice(0, cursor);
+  const hashIdx = left.lastIndexOf("#");
+  if (hashIdx < 0) return { active: false, query: "", start: -1, suggestions: [] };
+  const prev = hashIdx > 0 ? left[hashIdx - 1] : " ";
+  if (!/\s|[(,;:]/.test(prev) && hashIdx !== 0) return { active: false, query: "", start: -1, suggestions: [] };
+  const query = left.slice(hashIdx + 1);
+  if (query.length > 60 || /\n/.test(query)) return { active: false, query: "", start: -1, suggestions: [] };
+
+  const q = query.trim().toLowerCase();
+  // Empty `#` shows the latest issues; digits filter by prefix; words filter by title substring.
+  let suggestions: IssueIndexItem[];
+  if (q.length === 0) {
+    suggestions = issues.slice(0, 6);
+  } else if (/^\d+$/.test(q)) {
+    suggestions = issues.filter(i => String(i.number).startsWith(q)).slice(0, 6);
+  } else {
+    suggestions = issues
+      .filter(i => i.title.toLowerCase().includes(q) || String(i.number).startsWith(q))
+      .slice(0, 6);
+  }
+  return { active: true, query, start: hashIdx, suggestions };
+}
+
 // Find suggestions while user is typing. Returns the active token (the
 // substring after the last "@" before cursor) plus matching profiles.
 export function mentionTrigger(text: string, cursor: number, profiles: Profile[]): {

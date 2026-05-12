@@ -6,6 +6,7 @@ import { MentionInput } from "./MentionInput";
 import { AttachmentChip } from "./AttachmentPreview";
 import { uploadAttachment, MAX_FILE_BYTES, humanSize, removeAttachment } from "@/lib/storage";
 import { parseMentions, renderRichHTML } from "@/lib/mentions";
+import { useIssueIndex } from "@/lib/issues";
 import type { Profile } from "@/lib/auth";
 
 function relTime(iso: string): string {
@@ -24,6 +25,7 @@ export function CommentThread({
   profiles: Profile[];
 }) {
   const { comments, attachments, loading, addComment, editComment, deleteComment } = useTaskComments(taskId);
+  const issueIndex = useIssueIndex();
   const [body, setBody] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -234,7 +236,8 @@ export function CommentThread({
           onChange={setBody}
           onSubmit={submit}
           profiles={profiles}
-          placeholder="Comment… ⌘/Ctrl+Enter to send. Use @ to mention."
+          issues={issueIndex}
+          placeholder="Comment… ⌘/Ctrl+Enter to send. @user to mention · #123 to link an issue."
           rows={2}
           disabled={busy}
         />

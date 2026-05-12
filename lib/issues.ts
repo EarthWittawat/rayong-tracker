@@ -288,3 +288,29 @@ export function useProfileMap(profiles: Profile[]) {
     return m;
   }, [profiles]);
 }
+
+// Lightweight index: {number, title, status} for every issue, kept in
+// realtime sync. Used by MentionInput's #picker dropdown.
+export type IssueLite = { number: number; title: string; status: IssueStatus };
+
+export function useIssueIndex(): IssueLite[] {
+  const [items, setItems] = useState<IssueLite[]>([]);
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb) return;
+    let alive = true;
+    async function refresh() {
+      const { data } = await sb!
+        .from("issues")
+        .select("number,title,status")
+        .order("number", { ascending: false });
+      if (alive) setItems((data as IssueLite[]) ?? []);
+    }
+    refresh();
+    const ch = sb.channel("issues-index")
+      .on("postgres_changes", { event: "*", schema: "public", table: "issues" }, () => { refresh(); })
+      .subscribe();
+    return () => { alive = false; sb.removeChannel(ch); };
+  }, []);
+  return items;
+}

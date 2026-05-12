@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { createIssue, DEFAULT_LABELS } from "@/lib/issues";
+import { createIssue, DEFAULT_LABELS, useIssueIndex } from "@/lib/issues";
 import { MentionInput } from "./MentionInput";
 import { LabelChip } from "./LabelChip";
 import type { Profile } from "@/lib/auth";
@@ -15,6 +15,7 @@ export function NewIssueModal({
   profiles: Profile[];
   onCreated: (issueNumber: number) => void;
 }) {
+  const issueIndex = useIssueIndex();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
@@ -94,7 +95,8 @@ export function NewIssueModal({
               value={body}
               onChange={setBody}
               profiles={profiles}
-              placeholder="Describe the issue. Use @ to mention teammates."
+              issues={issueIndex}
+              placeholder="Describe the issue. @ to mention · # to link another issue."
               rows={6}
             />
           </div>
