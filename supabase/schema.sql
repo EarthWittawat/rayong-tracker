@@ -204,6 +204,37 @@ create policy "attachments storage delete" on storage.objects
     bucket_id = 'attachments' and owner = auth.uid()
   );
 
+-- ===== subtasks =====
+-- Lightweight checklist items attached to a (member, stage) task. Anyone
+-- signed in can add and tick subtasks (Trello-style collaboration); only the
+-- author can delete their own subtask.
+
+create table if not exists public.subtasks (
+  id            uuid primary key default gen_random_uuid(),
+  task_id       text not null references public.tasks(id) on delete cascade,
+  author_id     uuid not null references public.profiles(id) on delete cascade,
+  title         text not null check (length(title) > 0 and length(title) <= 200),
+  done          bool not null default false,
+  position      int  not null default 0,
+  created_at    timestamptz not null default now(),
+  completed_at  timestamptz,
+  completed_by  uuid references public.profiles(id) on delete set null
+);
+
+create index if not exists idx_subtasks_task on public.subtasks(task_id);
+
+alter table public.subtasks enable row level security;
+
+drop policy if exists "subtasks read all"     on public.subtasks;
+drop policy if exists "subtasks insert auth"  on public.subtasks;
+drop policy if exists "subtasks update auth"  on public.subtasks;
+drop policy if exists "subtasks delete own"   on public.subtasks;
+
+create policy "subtasks read all"    on public.subtasks for select using (true);
+create policy "subtasks insert auth" on public.subtasks for insert with check (auth.uid() = author_id);
+create policy "subtasks update auth" on public.subtasks for update using (auth.uid() is not null) with check (auth.uid() is not null);
+create policy "subtasks delete own"  on public.subtasks for delete using (auth.uid() = author_id);
+
 -- ===== realtime publication =====
 -- Make sure tables broadcast changes via Supabase Realtime.
 alter publication supabase_realtime add table public.members;
@@ -211,3 +242,4 @@ alter publication supabase_realtime add table public.tasks;
 alter publication supabase_realtime add table public.profiles;
 alter publication supabase_realtime add table public.comments;
 alter publication supabase_realtime add table public.attachments;
+alter publication supabase_realtime add table public.subtasks;

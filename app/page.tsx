@@ -166,6 +166,8 @@ export default function Page() {
   }
 
   async function handleRemove(m: Member) {
+    // Defensive: prevent self-removal even if the UI button is bypassed.
+    if (session.profile && m.id === session.profile.id) return;
     const restore = await removeMember(m.id);
     if (restore) {
       setUndo({ name: m.name, restore });
@@ -445,6 +447,7 @@ export default function Page() {
               tasks={tasks}
               saveStates={saveStates}
               editing={editing}
+              profile={profile}
               onPatchTask={updateTask}
               onFocusMember={(id) => { setView("list"); setFocusId(id); setAllExpanded(true); setTimeout(() => { document.getElementById(`member-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); }}
             />
@@ -468,6 +471,7 @@ export default function Page() {
                     profiles={profiles}
                     lastActiveAt={lastActiveByMember.get(m.id)}
                     expanded={allExpanded}
+                    isSelf={m.id === profile.id}
                   />
                 </div>
               ))}

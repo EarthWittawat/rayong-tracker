@@ -11,7 +11,7 @@ import { formatRelative } from "@/lib/relativeTime";
 
 export function MemberCard({
   member, tasks, focused, onFocus, onPatchTask, onPatchMember, onRemove, saveStates, editing, profile, profiles,
-  lastActiveAt, expanded,
+  lastActiveAt, expanded, isSelf,
 }: {
   member: Member;
   tasks: Task[];
@@ -26,6 +26,7 @@ export function MemberCard({
   profiles: Profile[];
   lastActiveAt?: number;
   expanded?: boolean;
+  isSelf?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const [editingName, setEditingName] = useState(false);
@@ -166,7 +167,15 @@ export function MemberCard({
                      onChange={(e) => onPatchMember({ color: e.target.value })}
                      className="w-6 h-6 rounded border border-border align-middle bg-transparent" />
             </label>
-            {confirmRemove ? (
+            {isSelf ? (
+              <span
+                className="text-muted2 inline-flex items-center gap-1"
+                title="You can't remove your own member row — sign out instead via the avatar menu."
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
+                you
+              </span>
+            ) : confirmRemove ? (
               <span className="inline-flex items-center gap-2">
                 <span className="text-crit">Remove {member.name}?</span>
                 <button

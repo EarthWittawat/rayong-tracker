@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { Member, Task, StageKey } from "@/lib/supabase";
 import { STAGES } from "@/lib/supabase";
 import type { SaveState, ActivityEvent } from "@/lib/useStore";
+import type { Profile } from "@/lib/auth";
 import { formatRelative } from "@/lib/relativeTime";
 import { useTaskCommentCount } from "@/lib/comments";
+import { SubtasksList } from "./SubtasksList";
 
 type Status = "todo" | "in_progress" | "done";
 
@@ -28,12 +30,13 @@ const STATUS_TONE: Record<Status, string> = {
 };
 
 export function BoardView({
-  members, tasks, saveStates, editing, onPatchTask, onFocusMember,
+  members, tasks, saveStates, editing, profile, onPatchTask, onFocusMember,
 }: {
   members: { m: Member; pct: number; lastActive: number }[];
   tasks: Task[];
   saveStates: Record<string, SaveState>;
   editing: Record<string, { user: ActivityEvent["user"]; expiresAt: number }>;
+  profile: Profile;
   onPatchTask: (id: string, patch: Partial<Task>) => void;
   onFocusMember: (id: string) => void;
 }) {
@@ -96,6 +99,7 @@ export function BoardView({
                       task={task}
                       save={saveStates[task.id]}
                       editingBy={editing[task.id]?.user}
+                      profile={profile}
                       onChange={(patch) => onPatchTask(task.id, patch)}
                       onOpen={() => onFocusMember(member.id)}
                     />
@@ -111,12 +115,13 @@ export function BoardView({
 }
 
 function BoardCard({
-  member, task, save, editingBy, onChange, onOpen,
+  member, task, save, editingBy, profile, onChange, onOpen,
 }: {
   member: Member;
   task: Task;
   save?: SaveState;
   editingBy?: ActivityEvent["user"];
+  profile: Profile;
   onChange: (patch: Partial<Task>) => void;
   onOpen: () => void;
 }) {
@@ -260,6 +265,10 @@ function BoardCard({
               className="ml-auto text-[10px] h-7 px-2 rounded border border-border text-info hover:bg-info/5"
               title="Open the member card to access comments and full controls"
             >open details ↗</button>
+          </div>
+
+          <div className="pt-2 border-t border-border">
+            <SubtasksList taskId={task.id} profile={profile} accentColor={member.color} />
           </div>
         </div>
       )}

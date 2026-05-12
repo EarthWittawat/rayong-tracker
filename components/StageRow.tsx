@@ -6,6 +6,7 @@ import type { SaveState, ActivityEvent } from "@/lib/useStore";
 import type { Profile } from "@/lib/auth";
 import { useTaskCommentCount } from "@/lib/comments";
 import { CommentThread } from "./CommentThread";
+import { SubtasksList } from "./SubtasksList";
 
 export function StageRow({
   task, label, short, hint, color, save, editingBy, profile, profiles, onChange,
@@ -217,8 +218,12 @@ export function StageRow({
       )}
 
       {drawerOpen && (
-        <div className="mt-3 ml-1 pl-3 border-l-2" style={{ borderColor: `${color}40` }}>
-          <CommentThread taskId={task.id} profile={profile} profiles={profiles} />
+        <div className="mt-3 ml-1 pl-3 border-l-2 space-y-4" style={{ borderColor: `${color}40` }}>
+          <SubtasksList taskId={task.id} profile={profile} accentColor={color} />
+          <div className="border-t border-border pt-3">
+            <div className="text-[10px] eyebrow text-muted2 mb-2">Comments</div>
+            <CommentThread taskId={task.id} profile={profile} profiles={profiles} />
+          </div>
         </div>
       )}
     </div>
