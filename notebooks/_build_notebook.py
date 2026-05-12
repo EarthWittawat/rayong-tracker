@@ -138,7 +138,18 @@ class Config:
     ldd_landuse:    Path = Path("D:/work/GIS/rf/preprocess/full_dataset/Landuse_ryg/ระยอง2567/การใช้ที่ดิน")
     ldd_admin:      Path = Path("D:/work/GIS/rf/preprocess/full_dataset/Landuse_ryg/ระยอง2567/ขอบเขตการปกครอง")
 
-    # AOI bbox (lng/lat, EPSG:4326) — default = Klaeng area, ~10×10 km
+    # AOI assignment.
+    #   "FULL"  → whole province
+    #   "NW","NE","SW","SE"  → one of the four Rayong quadrants (split at the
+    #     polygon centroid; matches the tracker board's quadrant chips so
+    #     teammates can each work on their assigned quarter using the same
+    #     notebook).
+    #   "CUSTOM" → fall back to the explicit `aoi_bbox` set below.
+    aoi_quadrant:   str   = "SE"   # ←—— change this one line per teammate
+
+    # Explicit bbox + name. Filled in automatically from aoi_quadrant unless
+    # aoi_quadrant == "CUSTOM" (then edit these two yourself, e.g. paste a
+    # bbox drawn on the website's satellite map).
     aoi_bbox:       tuple = (101.55, 12.70, 101.65, 12.80)
     aoi_name:       str   = "klaeng_10km"
 
@@ -167,11 +178,38 @@ class Config:
 
     seed: int = 42
 
+# --- Quadrant bboxes (lng/lat, west/south/east/north) ------------------------
+# Mirror the constants in lib/rayong.ts so the notebook + website agree on
+# where the quadrant splits happen. The split is at the Rayong polygon's
+# area-weighted centroid, not the bbox midline.
+RAYONG_BBOX_WEBN = (100.9845, 12.5834, 101.8305, 13.1635)   # west, south, east, north
+RAYONG_CENTER_LNG, RAYONG_CENTER_LAT = 101.4291, 12.8539
+
+_W, _S, _E, _N = RAYONG_BBOX_WEBN
+QUADRANT_BBOX = {
+    "FULL": (_W, _S, _E, _N),
+    "NW":   (_W,                 RAYONG_CENTER_LAT, RAYONG_CENTER_LNG, _N),
+    "NE":   (RAYONG_CENTER_LNG,  RAYONG_CENTER_LAT, _E,                _N),
+    "SW":   (_W,                 _S,                RAYONG_CENTER_LNG, RAYONG_CENTER_LAT),
+    "SE":   (RAYONG_CENTER_LNG,  _S,                _E,                RAYONG_CENTER_LAT),
+}
+
 CFG = Config()
+# Resolve aoi_bbox + aoi_name from the chosen quadrant. CUSTOM keeps whatever
+# the user typed above (useful when pasting a drawn bbox from the satellite
+# map readout panel on the website).
+if CFG.aoi_quadrant != "CUSTOM":
+    if CFG.aoi_quadrant not in QUADRANT_BBOX:
+        raise ValueError(f"unknown aoi_quadrant '{CFG.aoi_quadrant}' (expected FULL/NW/NE/SW/SE/CUSTOM)")
+    CFG.aoi_bbox = QUADRANT_BBOX[CFG.aoi_quadrant]
+    CFG.aoi_name = f"rayong_{CFG.aoi_quadrant.lower()}"
+
 for d in (CFG.cache_root, CFG.out_root, CFG.out_root / "figs"):
     d.mkdir(parents=True, exist_ok=True)
-print("AOI:", CFG.aoi_bbox, "·", CFG.aoi_name)
-print("cache:", CFG.cache_root)
+print(f"AOI quadrant : {CFG.aoi_quadrant}")
+print(f"AOI bbox     : {CFG.aoi_bbox}  (west, south, east, north)")
+print(f"AOI name     : {CFG.aoi_name}")
+print(f"cache root   : {CFG.cache_root}")
 ''')
 
 code(r'''import torch

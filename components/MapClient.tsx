@@ -347,6 +347,60 @@ export function MapClient({
           )}
         </div>
       </div>
+
+      {/* per-quadrant AOI presets — paste into notebooks/_build_notebook.py or just set CFG.aoi_quadrant */}
+      <div className="rounded-lg border border-border bg-surface p-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs uppercase tracking-wider text-muted2">Quadrant AOI presets</h3>
+          <span className="text-[10px] text-muted2">notebook · <code className="bg-surface2 px-1 rounded">CFG.aoi_quadrant</code></span>
+        </div>
+        <p className="text-[11px] text-muted mb-3">
+          Each teammate computes on the same notebook, just with a different quadrant. Pick yours from the chips below — copy the one-line CFG override, or the raw bbox for a custom AOI.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {QUADRANTS.map(q => {
+            const [lat, lng] = quadCenter(q.key);
+            const { minLng, maxLng, minLat, maxLat } = RAYONG_BBOX;
+            const cLng = RAYONG_CENTER.lng, cLat = RAYONG_CENTER.lat;
+            const west = q.key.includes("W") ? minLng : cLng;
+            const east = q.key.includes("W") ? cLng : maxLng;
+            const south = q.key.startsWith("N") ? cLat : minLat;
+            const north = q.key.startsWith("N") ? maxLat : cLat;
+            const cfgLine = `CFG.aoi_quadrant = "${q.key}"`;
+            const bboxPyLine = `aoi_bbox = (${west.toFixed(4)}, ${south.toFixed(4)}, ${east.toFixed(4)}, ${north.toFixed(4)})  # ${q.key}`;
+            const member = memberByQ[q.key].member;
+            return (
+              <div key={q.key} className="rounded-md border border-border bg-surface2/40 p-2.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-sm font-semibold text-ink tabular">{q.key}</span>
+                  {member && (
+                    <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full"
+                          style={{ background: `${member.color}1A`, color: member.color, border: `1px solid ${member.color}40` }}>
+                      <span>{member.emoji}</span>{member.name}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] tabular text-muted2 mb-2">
+                  W {west.toFixed(4)} · S {south.toFixed(4)} · E {east.toFixed(4)} · N {north.toFixed(4)}
+                  <span className="ml-1 text-muted2/70">· center {lng.toFixed(3)}, {lat.toFixed(3)}</span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => copy(cfgLine, `${q.key} CFG line`)}
+                    className="text-[10px] px-2 py-1 rounded border border-border text-muted hover:text-ink hover:bg-surface2 tabular"
+                    title={cfgLine}
+                  >copy CFG line</button>
+                  <button
+                    onClick={() => copy(bboxPyLine, `${q.key} bbox`)}
+                    className="text-[10px] px-2 py-1 rounded border border-border text-muted hover:text-ink hover:bg-surface2 tabular"
+                    title={bboxPyLine}
+                  >copy bbox</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
