@@ -127,7 +127,7 @@ export function PipelineGuide({ tasks }: { tasks: Task[] }) {
             target="_blank"
             rel="noopener noreferrer"
             className="text-[11px] eyebrow inline-flex items-center gap-1 px-2.5 py-1 rounded border border-border text-muted hover:text-ink hover:bg-surface2 transition-colors"
-            title="Open the pipeline notebook on GitHub"
+            title="Open the pipeline notebook"
           >
             Notebook
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17l10-10M17 7H7v10" /></svg>

@@ -1,6 +1,6 @@
 -- =========================================================
 -- Rayong Crop Tracker · Issues feature
--- GitHub-style issues + comments. Open to any authenticated profile.
+-- In-app issues + comments. Open to any authenticated profile.
 -- =========================================================
 
 -- ===== issues =====

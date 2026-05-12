@@ -26,7 +26,7 @@ The web app is the *operations side* of the project. The Jupyter notebook in `no
 - **Subtasks** — per-task checklists; anyone can tick, only the author can delete.
 - **Comments + @mentions + Supabase Storage attachments** with email fan-out via Resend and a daily-digest Vercel Cron.
 - **Light + dark themes** with a CSS-variable palette and a force-dark navigation slab.
-- **Issues** — GitHub-style tracker at `/issues`. Anyone signed in can open issues, label them, assign teammates, comment with `@mentions`, and close / reopen. Backed by `issues` + `issue_comments` tables on Supabase with realtime sync.
+- **Issues** — in-app issue tracker at `/issues`. Anyone signed in can open issues, label them, assign teammates, comment with `@mentions` + `#123` cross-links, and close / reopen. Backed by `issues` + `issue_comments` tables on Supabase with realtime sync.
 
 ---
 
@@ -69,7 +69,7 @@ profiles       : one row per Google account (display, color, emoji, prefs)
 subtasks       : user-authored checklist items under each task
 comments       : threaded discussion per task, with @mentions
 attachments    : files attached to comments (Supabase Storage)
-issues         : GitHub-style issue tracker (number, title, body, labels, status)
+issues         : in-app issue tracker (number, title, body, labels, status)
 issue_comments : threaded discussion per issue, with @mentions
 task_subscribers, notifications  : digest mailer plumbing
 ```

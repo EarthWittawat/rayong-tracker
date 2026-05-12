@@ -72,7 +72,7 @@ function escapeHtml(s: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Issue references: GitHub-style `#NNN` autolinks.
+// Issue references: `#NNN` autolinks that point at /issues/NNN.
 // Match when '#' sits at start of body or after whitespace / punctuation,
 // so things like "id#123" inside a URL don't trigger.
 // ─────────────────────────────────────────────────────────────
