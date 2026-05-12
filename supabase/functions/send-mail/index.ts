@@ -155,11 +155,17 @@ async function handleTaskComment(commentId: string): Promise<Response> {
   const { data: author } = await admin.from("profiles").select("id, name").eq("id", comment.author_id).single();
   const authorName = author?.name ?? "Someone";
 
-  const recipientIds = new Set<string>();
-  for (const id of (comment.mentions ?? [])) recipientIds.add(id as string);
+  const mentionIds = new Set<string>((comment.mentions ?? []) as string[]);
+  const recipientIds = new Set<string>(mentionIds);
   const { data: subs } = await admin.from("task_subscribers").select("user_id").eq("task_id", comment.task_id);
   for (const s of subs ?? []) recipientIds.add(s.user_id as string);
-  recipientIds.delete(comment.author_id);
+  // Strip the author UNLESS they explicitly self-mentioned. Self-mention
+  // = an intentional ping (useful for testing / personal reminders), so
+  // we honour it. The author is still excluded from the subscriber-only
+  // reply fan-out.
+  if (!mentionIds.has(comment.author_id)) {
+    recipientIds.delete(comment.author_id);
+  }
 
   if (recipientIds.size === 0) {
     return json({ ok: true, sent: 0, note: "no recipients" });
@@ -243,11 +249,14 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
   const { data: author } = await admin.from("profiles").select("id, name").eq("id", c.author_id).single();
   const authorName = author?.name ?? "Someone";
 
-  // Recipients = mentions ∪ {assignee} \ {author}.
-  const recipientIds = new Set<string>();
-  for (const id of (c.mentions ?? [])) recipientIds.add(id as string);
+  // Recipients = mentions ∪ {assignee}. Author is dropped UNLESS they
+  // explicitly self-mentioned (intentional ping — keep it).
+  const mentionIds = new Set<string>((c.mentions ?? []) as string[]);
+  const recipientIds = new Set<string>(mentionIds);
   if (issue.assignee_id) recipientIds.add(issue.assignee_id);
-  recipientIds.delete(c.author_id);
+  if (!mentionIds.has(c.author_id)) {
+    recipientIds.delete(c.author_id);
+  }
 
   if (recipientIds.size === 0) {
     return json({ ok: true, sent: 0, note: "no recipients" });
