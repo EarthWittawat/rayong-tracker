@@ -61,11 +61,16 @@ dependencies:
       - torchmetrics[image]
 
       # ---------------------------------------------------------------
-      # PyTorch with CUDA 12.1. Swap the index URL if your driver is
-      # CUDA 11.8 (`cu118`) or you only have CPU (`cpu`).
-      # See: https://pytorch.org/get-started/locally/
+      # PyTorch with CUDA 12.1. The '+cu121' local-version tag only
+      # exists on the PyTorch wheel index, so even though we list it as
+      # --extra-index-url (pip's default ranks PyPI first), the resolver
+      # is forced to pick the CUDA build — otherwise it silently falls
+      # back to the CPU wheel on PyPI.
+      #
+      # Swap '+cu121' (and the index URL) for '+cu118' / '+cpu' if your
+      # driver is different. See: https://pytorch.org/get-started/locally/
       # ---------------------------------------------------------------
       - --extra-index-url https://download.pytorch.org/whl/cu121
-      - "torch>=2.2"
-      - torchvision
-      - torchaudio
+      - "torch==2.3.1+cu121"
+      - "torchvision==0.18.1+cu121"
+      - "torchaudio==2.3.1+cu121"
