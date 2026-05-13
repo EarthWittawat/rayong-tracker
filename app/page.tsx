@@ -343,10 +343,6 @@ export default function Page() {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h20v14H2z" /><path d="M2 17l10 5 10-5" /></svg>
             Whiteboard
           </a>
-          <a href="/dataset" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-surface text-ink font-medium hover:bg-surface2 transition-colors whitespace-nowrap">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h18v13H3z" /><path d="M3 7l3-4h12l3 4" /><path d="M10 12h4" /></svg>
-            Dataset
-          </a>
         </div>
       </nav>
 
