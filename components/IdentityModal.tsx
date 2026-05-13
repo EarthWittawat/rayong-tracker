@@ -117,7 +117,7 @@ export function IdentityModal({
         </div>
 
         <div className="text-[11px] uppercase tracking-wider text-muted2 mb-1.5">Emoji (shown when no avatar)</div>
-        <div className="grid grid-cols-6 gap-1 mb-4">
+        <div className="grid grid-cols-8 gap-1 mb-4 max-h-[200px] overflow-y-auto pr-1">
           {EMOJI_CHOICES.map(e => (
             <button key={e} onClick={() => setDraft(d => ({ ...d, emoji: e }))}
                     className={`h-9 rounded-md text-lg transition-colors ${draft.emoji === e ? "bg-surface2 ring-1 ring-border2" : "hover:bg-surface2"}`}>

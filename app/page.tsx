@@ -28,7 +28,13 @@ import type { Member, StageKey } from "@/lib/supabase";
 import { formatRelative } from "@/lib/relativeTime";
 
 const PALETTE = ["#C96442", "#3F6E97", "#3F7D58", "#B68A2E", "#7B5BA6", "#9B5C7A", "#4F7A95", "#7C7A52"];
-const EMOJI   = ["🌾", "🛰️", "🌱", "🌳", "✨", "🌻", "🍃", "🌿"];
+const EMOJI = [
+  "🌾", "🛰️", "🌱", "🌳", "🌻", "🍃", "🌿", "🌺", "🌼", "🌵", "🦋", "✨",
+  "🐧", "🐤", "🦊", "🐼", "🦉", "🐢", "🐙", "🐝", "🦔", "🦄", "🐯", "🦦",
+  "🍵", "🍙", "🍣", "🍓", "🍑", "🥑", "☕", "🥐",
+  "🚀", "🌙", "⭐", "⚡", "🌊", "🌈",
+  "🧪", "🔭", "🗺️", "🎨",
+];
 
 type SortMode = "default" | "progress-desc" | "progress-asc" | "name" | "recent";
 

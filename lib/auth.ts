@@ -16,7 +16,20 @@ export type Profile = {
 };
 
 const PALETTE = ["#C96442", "#3F6E97", "#3F7D58", "#B68A2E", "#7B5BA6", "#9B5C7A", "#4F7A95", "#7C7A52", "#A85C9D", "#5F8A6E"];
-const EMOJI   = ["🌾", "🛰️", "🌱", "🌳", "✨", "🌻", "🍃", "🌿", "🌺", "🌼", "🌵", "🦋"];
+const EMOJI = [
+  // botanical / satellite (original set, kept first so existing profiles
+  // stay on the same default emoji after a deterministic-hash bucket shift
+  // would only walk inside this group).
+  "🌾", "🛰️", "🌱", "🌳", "🌻", "🍃", "🌿", "🌺", "🌼", "🌵", "🦋", "✨",
+  // critters
+  "🐧", "🐤", "🦊", "🐼", "🦉", "🐢", "🐙", "🐝", "🦔", "🦄", "🐯", "🦦",
+  // food + drink
+  "🍵", "🍙", "🍣", "🍓", "🍑", "🥑", "☕", "🥐",
+  // sky / weather
+  "🚀", "🌙", "⭐", "⚡", "🌊", "🌈",
+  // tools / lab
+  "🧪", "🔭", "🗺️", "🎨",
+];
 
 export const PALETTE_COLORS = PALETTE;
 export const EMOJI_CHOICES = EMOJI;
