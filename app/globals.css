@@ -111,6 +111,33 @@ h1, h2, h3 { letter-spacing: -0.018em; }
   transition: outline-color 600ms ease-out;
 }
 
+/* Notification bell when there are unread items: gentle ambient glow so a
+   user returning to the tab can spot it without it being obnoxious. */
+@keyframes notify-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--c-good) / 0.0); }
+  50%      { box-shadow: 0 0 0 6px rgb(var(--c-good) / 0.20); }
+}
+.notify-glow { animation: notify-glow 2.6s ease-in-out infinite; }
+
+/* Short shake when a new unread lands (in-page) or when the user comes
+   back to a tab that gained unread while hidden. Fires for ~2.4 s then
+   stops via React removing the class. */
+@keyframes notify-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+  90%      { transform: translateX(0); }
+}
+.notify-shake { animation: notify-shake 0.6s ease-in-out 3; }
+
+/* The unread-count badge pulses to draw the eye. Subtler than the bell
+   glow so the two animations together don't fight. */
+@keyframes notify-badge-pulse {
+  0%, 100% { transform: scale(1);   box-shadow: 0 0 0 0   rgb(var(--c-good) / 0.55); }
+  50%      { transform: scale(1.08); box-shadow: 0 0 0 4px rgb(var(--c-good) / 0); }
+}
+.notify-badge-pulse { animation: notify-badge-pulse 1.8s ease-out infinite; }
+
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none; margin: 0;

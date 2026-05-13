@@ -23,6 +23,57 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
+  // Mirror unread count into the document title so a backgrounded tab makes
+  // new mentions obvious in the OS tab strip ("(3) SynthCrop …"). Restores
+  // on unmount.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const base = document.title.replace(/^\(\d+\)\s*/, "");
+    document.title = unreadCount > 0 ? `(${unreadCount}) ${base}` : base;
+    return () => {
+      document.title = document.title.replace(/^\(\d+\)\s*/, "");
+    };
+  }, [unreadCount]);
+
+  // Bell "shake" when a new unread arrives while the page is currently
+  // visible, OR when the user returns to a tab that gained unread while
+  // it was hidden. shakeUntil holds the wall-clock when the shake ends so
+  // re-entries always restart the animation cleanly.
+  const [shakeUntil, setShakeUntil] = useState(0);
+  const prevUnreadRef = useRef(unreadCount);
+  const hiddenUnreadRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (unreadCount > prevUnreadRef.current) {
+      setShakeUntil(Date.now() + 2400);
+    }
+    prevUnreadRef.current = unreadCount;
+  }, [unreadCount]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    function onVis() {
+      if (document.visibilityState === "hidden") {
+        hiddenUnreadRef.current = unreadCount;
+        return;
+      }
+      // Returned to the tab. If unread count grew while away, shake the bell.
+      if (hiddenUnreadRef.current !== null && unreadCount > hiddenUnreadRef.current) {
+        setShakeUntil(Date.now() + 2400);
+      }
+      hiddenUnreadRef.current = null;
+    }
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [unreadCount]);
+
+  const shaking = shakeUntil > Date.now();
+  useEffect(() => {
+    if (!shaking) return;
+    const t = setTimeout(() => setShakeUntil(0), shakeUntil - Date.now());
+    return () => clearTimeout(t);
+  }, [shaking, shakeUntil]);
+
   // Close on outside click.
   useEffect(() => {
     if (!open) return;
@@ -48,7 +99,7 @@ export function NotificationBell() {
     <div ref={wrapRef} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="relative inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-white/20 nav-muted hover:nav-ink hover:bg-white/5"
+        className={`relative inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border transition-colors ${unreadCount > 0 ? "border-good/60 bg-good/15 nav-ink notify-glow" : "border-white/20 nav-muted hover:nav-ink hover:bg-white/5"} ${shaking ? "notify-shake" : ""}`}
         title={unreadCount > 0 ? `${unreadCount} unread` : "notifications"}
         aria-label="notifications"
       >
@@ -57,7 +108,7 @@ export function NotificationBell() {
           <path d="M10 21a2 2 0 004 0" />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-good text-[9px] font-bold text-bg flex items-center justify-center tabular">
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-good text-[9px] font-bold text-bg flex items-center justify-center tabular notify-badge-pulse">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
