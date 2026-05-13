@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabase } from "./supabase";
 import type { Profile } from "./auth";
-import { parseMentions } from "./mentions";
+import { parseMentions, expandMentionIds } from "./mentions";
 
 export type IssueStatus = "open" | "closed";
 
@@ -236,7 +236,7 @@ export function useIssueComments(issueId: string | null) {
     if (!issueId) return null;
     const sb = getSupabase();
     if (!sb) return null;
-    const mentions = parseMentions(body, profiles).map(m => m.id);
+    const mentions = expandMentionIds(parseMentions(body, profiles), profiles);
     const { data, error } = await sb.from("issue_comments")
       .insert({ issue_id: issueId, author_id: profile.id, body, mentions })
       .select("*").single();
@@ -251,7 +251,7 @@ export function useIssueComments(issueId: string | null) {
   const editComment = useCallback(async (id: string, body: string, profiles: Profile[]) => {
     const sb = getSupabase();
     if (!sb) return;
-    const mentions = parseMentions(body, profiles).map(m => m.id);
+    const mentions = expandMentionIds(parseMentions(body, profiles), profiles);
     await sb.from("issue_comments").update({ body, mentions, edited_at: new Date().toISOString() }).eq("id", id);
   }, []);
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "./supabase";
 import type { Profile } from "./auth";
 import type { AttachmentRow } from "./storage";
-import { parseMentions } from "./mentions";
+import { parseMentions, expandMentionIds } from "./mentions";
 
 export type CommentRow = {
   id: string;
@@ -106,7 +106,7 @@ export function useTaskComments(taskId: string | null) {
     if (!taskId) return null;
     const sb = getSupabase();
     if (!sb) return null;
-    const mentions = parseMentions(body, profiles).map(m => m.id);
+    const mentions = expandMentionIds(parseMentions(body, profiles), profiles);
     const { data, error } = await sb
       .from("comments")
       .insert({ task_id: taskId, author_id: profile.id, body, mentions })
@@ -127,7 +127,7 @@ export function useTaskComments(taskId: string | null) {
   const editComment = useCallback(async (id: string, body: string, profiles: Profile[]) => {
     const sb = getSupabase();
     if (!sb) return;
-    const mentions = parseMentions(body, profiles).map(m => m.id);
+    const mentions = expandMentionIds(parseMentions(body, profiles), profiles);
     await sb.from("comments")
       .update({ body, mentions, edited_at: new Date().toISOString() })
       .eq("id", id);

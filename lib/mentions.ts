@@ -13,6 +13,11 @@ export type MentionMatch = {
 
 const MENTION_RE = /(^|[^A-Za-z0-9_])@([A-Za-z0-9_][A-Za-z0-9_\s.\-]{0,40})/g;
 
+// Sentinel id for the broadcast "@all" mention. parseMentions emits exactly
+// one match with this id when @all appears; expandMentionIds turns that into
+// the full list of real profile UIDs at the point we write to Supabase.
+export const ALL_MENTION_ID = "__all__";
+
 export function parseMentions(body: string, profiles: Profile[]): MentionMatch[] {
   if (!body) return [];
   // Sort longest names first so "@Alice Smith" wins over "@Alice".
@@ -29,6 +34,16 @@ export function parseMentions(body: string, profiles: Profile[]): MentionMatch[]
   while ((m = MENTION_RE.exec(body)) !== null) {
     const atIdx = m.index + (m[1]?.length ?? 0);
     const rest  = body.slice(atIdx + 1);
+
+    // Broadcast: `@all` (word-bounded — don't match `@allison`).
+    if (/^all(?![A-Za-z0-9_])/.test(rest)) {
+      if (!seen.has(ALL_MENTION_ID)) {
+        seen.add(ALL_MENTION_ID);
+        out.push({ id: ALL_MENTION_ID, name: "all", start: atIdx, end: atIdx + 4 });
+      }
+      continue;
+    }
+
     // Match against any known display name (case-insensitive).
     const hit = byNameLen.find(p => {
       const n = p.name.trim();
@@ -49,6 +64,21 @@ export function parseMentions(body: string, profiles: Profile[]): MentionMatch[]
   return out;
 }
 
+// Resolve a parseMentions() result to the actual recipient UID list. The
+// broadcast sentinel expands to every profile id; everything else passes
+// through as-is. De-duped.
+export function expandMentionIds(matches: MentionMatch[], profiles: Profile[]): string[] {
+  const ids = new Set<string>();
+  for (const m of matches) {
+    if (m.id === ALL_MENTION_ID) {
+      for (const p of profiles) ids.add(p.id);
+    } else {
+      ids.add(m.id);
+    }
+  }
+  return Array.from(ids);
+}
+
 // Format the body with mentions wrapped in <span class="mention">…</span>.
 // Returns plain HTML; callers must trust the source (own profile names only).
 export function renderMentionsHTML(body: string, mentions: MentionMatch[]): string {
@@ -58,7 +88,8 @@ export function renderMentionsHTML(body: string, mentions: MentionMatch[]): stri
   let cursor = 0;
   for (const m of sorted) {
     if (m.start > cursor) parts.push(escapeHtml(body.slice(cursor, m.start)));
-    parts.push(`<span class="mention" data-uid="${m.id}">@${escapeHtml(m.name)}</span>`);
+    const isAll = m.id === ALL_MENTION_ID;
+    parts.push(`<span class="mention${isAll ? " mention-all" : ""}" data-uid="${m.id}">@${escapeHtml(m.name)}</span>`);
     cursor = m.end;
   }
   if (cursor < body.length) parts.push(escapeHtml(body.slice(cursor)));
@@ -122,7 +153,8 @@ export function renderRichHTML(body: string, profiles: Profile[]): string {
     if (t.start < cursor) continue;            // overlap — drop later token
     if (t.start > cursor) parts.push(escapeHtml(body.slice(cursor, t.start)));
     if (t.kind === "mention") {
-      parts.push(`<span class="mention" data-uid="${t.data.id}">@${escapeHtml(t.data.name)}</span>`);
+      const isAll = t.data.id === ALL_MENTION_ID;
+      parts.push(`<span class="mention${isAll ? " mention-all" : ""}" data-uid="${t.data.id}">@${escapeHtml(t.data.name)}</span>`);
     } else {
       const n = t.data.number;
       parts.push(`<a class="issue-ref" href="/issues/${n}" data-issue="${n}">#${n}</a>`);
@@ -179,6 +211,18 @@ export function issueTrigger(text: string, cursor: number, issues: IssueIndexIte
   return { active: true, query, start: hashIdx, suggestions };
 }
 
+// Pseudo-profile representing the broadcast "@all" recipient set. Mixed into
+// mentionTrigger suggestions so the picker can offer it; the same sentinel
+// id is recognised by parseMentions + expandMentionIds.
+export const ALL_MENTION_SUGGESTION: Profile = {
+  id: ALL_MENTION_ID,
+  name: "all",
+  color: "#6B6862",
+  emoji: "📣",
+  avatar_url: null,
+  email: null,
+};
+
 // Find suggestions while user is typing. Returns the active token (the
 // substring after the last "@" before cursor) plus matching profiles.
 export function mentionTrigger(text: string, cursor: number, profiles: Profile[]): {
@@ -197,8 +241,10 @@ export function mentionTrigger(text: string, cursor: number, profiles: Profile[]
   // Allow spaces but cap to avoid runaway
   if (query.length > 40 || /\n/.test(query)) return { active: false, query: "", start: -1, suggestions: [] };
   const q = query.toLowerCase();
-  const sug = profiles
-    .filter(p => p.name && p.name.toLowerCase().includes(q))
-    .slice(0, 6);
-  return { active: true, query, start: atIdx, suggestions: sug };
+  const sug: Profile[] = [];
+  // Surface @all at the top whenever its name still matches the query
+  // (empty query → always offered; "a"/"al"/"all" → still offered).
+  if (q.length === 0 || "all".startsWith(q)) sug.push(ALL_MENTION_SUGGESTION);
+  sug.push(...profiles.filter(p => p.name && p.name.toLowerCase().includes(q)).slice(0, 6));
+  return { active: true, query, start: atIdx, suggestions: sug.slice(0, 7) };
 }
