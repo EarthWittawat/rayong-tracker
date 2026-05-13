@@ -8,8 +8,19 @@
 //
 // The handler verifies the HMAC SHA-256 signature, inspects which files
 // changed across the push, picks a topic (notebook / webapp / release /
-// general), and fans out one notification per profile via the service-role
-// key so the insert bypasses RLS (the webhook has no user session).
+// general), filters out low-signal commits, and fans out one notification
+// per profile via the service-role key so the insert bypasses RLS (the
+// webhook has no user session).
+//
+// Filtering rules (in order — first match wins):
+//   1. Any commit body contains [skip notify] / [no broadcast] → drop.
+//   2. Any commit body contains [broadcast] / [announce]      → send.
+//   3. Otherwise drop the push when every commit subject begins with a
+//      Conventional Commits type in BROADCAST_SKIP_TYPES env (default
+//      chore, docs, style, test, ci, build, refactor, deps).
+//   4. Otherwise summarise the substantive commits and send.
+// The summary lists up to five substantive subjects; maintenance commits
+// are counted but their subjects are not shown.
 
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
@@ -57,6 +68,53 @@ function pickTopic(files: string[]): "notebook" | "webapp" | "release" | "genera
   return "general";
 }
 
+// Conventional Commits prefixes considered low-signal. Pushes that consist
+// entirely of these get dropped so the bell isn't flooded by every fmt /
+// dep bump / typo fix. Override via BROADCAST_SKIP_TYPES env (comma list).
+const DEFAULT_SKIP_TYPES = "chore,docs,style,test,ci,build,refactor,deps";
+const SKIP_TYPES = new Set(
+  (process.env.BROADCAST_SKIP_TYPES ?? DEFAULT_SKIP_TYPES)
+    .split(",").map(s => s.trim().toLowerCase()).filter(Boolean),
+);
+
+function commitType(subject: string): string | null {
+  const m = subject.match(/^(\w+)(\([^)]*\))?!?:/);
+  return m ? m[1].toLowerCase() : null;
+}
+
+type Decision = { yes: boolean; reason: string; substantive: string[]; lowSignal: string[] };
+
+function decideBroadcast(commits: Commit[]): Decision {
+  const subjects = commits.map(c => (c.message ?? "").split("\n")[0]).filter(Boolean);
+
+  // Hard skip marker: any [skip notify] / [no broadcast] in any commit
+  // anywhere in the push cancels the broadcast.
+  if (commits.some(c => /\[skip[\s-]?notify\]|\[no[\s-]?broadcast\]/i.test(c.message ?? ""))) {
+    return { yes: false, reason: "skip-marker", substantive: [], lowSignal: subjects };
+  }
+
+  // Classify each subject. Anything without a recognised type is treated
+  // as substantive (better to over-broadcast than swallow a real change).
+  const substantive: string[] = [];
+  const lowSignal: string[] = [];
+  for (const s of subjects) {
+    const t = commitType(s);
+    if (t && SKIP_TYPES.has(t)) lowSignal.push(s);
+    else substantive.push(s);
+  }
+
+  // Hard include marker on any commit forces a broadcast regardless of
+  // the type filter — useful for ad-hoc "everyone should see this" pushes.
+  if (commits.some(c => /\[broadcast\]|\[announce\]/i.test(c.message ?? ""))) {
+    return { yes: true, reason: "force-marker", substantive: substantive.length ? substantive : subjects, lowSignal };
+  }
+
+  if (substantive.length === 0) {
+    return { yes: false, reason: "all-low-signal", substantive, lowSignal };
+  }
+  return { yes: true, reason: `substantive:${substantive.length}`, substantive, lowSignal };
+}
+
 export async function POST(req: Request) {
   const raw = await req.text();
   const sig = req.headers.get("x-hub-signature-256");
@@ -89,11 +147,25 @@ export async function POST(req: Request) {
   const files = commits.flatMap(c => [...(c.added ?? []), ...(c.modified ?? []), ...(c.removed ?? [])]);
   const topic = pickTopic(files);
 
-  const subjects = commits.map(c => (c.message ?? "").split("\n")[0]).filter(Boolean);
-  const shown = subjects.slice(0, 5);
+  const decision = decideBroadcast(commits);
+  if (!decision.yes) {
+    return NextResponse.json({
+      ok: true,
+      skipped: decision.reason,
+      commits: commits.length,
+      low_signal: decision.lowSignal.length,
+    });
+  }
+
+  const shown = decision.substantive.slice(0, 5);
   const title = (shown[0] ?? `${commits.length} new commits`).slice(0, 120);
   const lines = shown.map(s => `• ${s}`);
-  if (commits.length > shown.length) lines.push(`…and ${commits.length - shown.length} more`);
+  if (decision.substantive.length > shown.length) {
+    lines.push(`…and ${decision.substantive.length - shown.length} more substantive commits`);
+  }
+  if (decision.lowSignal.length > 0) {
+    lines.push(`(+${decision.lowSignal.length} maintenance commits hidden)`);
+  }
   const full = lines.join("\n");
 
   const authorName = payload.pusher?.name
@@ -124,10 +196,21 @@ export async function POST(req: Request) {
       repo: payload.repository?.full_name ?? null,
       compare_url: payload.compare ?? null,
       commit_count: commits.length,
+      substantive_count: decision.substantive.length,
+      low_signal_count: decision.lowSignal.length,
+      decision: decision.reason,
     },
   }));
   const { error: iErr } = await sb.from("notifications").insert(rows);
   if (iErr) return NextResponse.json({ ok: false, error: iErr.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, sent: rows.length, topic, commits: commits.length });
+  return NextResponse.json({
+    ok: true,
+    sent: rows.length,
+    topic,
+    commits: commits.length,
+    substantive: decision.substantive.length,
+    low_signal: decision.lowSignal.length,
+    reason: decision.reason,
+  });
 }
