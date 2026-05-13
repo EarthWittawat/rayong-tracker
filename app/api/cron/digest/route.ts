@@ -9,14 +9,13 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { mailerConfigured, sendMail } from "@/lib/mailer";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const URL_         = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-const RESEND_KEY   = process.env.RESEND_API_KEY ?? "";
-const MAIL_FROM    = process.env.MAIL_FROM ?? "Rayong Tracker <onboarding@resend.dev>";
 const APP_URL      = process.env.APP_URL ?? "";
 const CRON_SECRET  = process.env.CRON_SECRET ?? "";
 
@@ -24,17 +23,6 @@ function htmlEscape(s: string) {
   return s.replace(/[&<>'"]/g, c => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
   } as Record<string, string>)[c]);
-}
-
-async function send(to: string, subject: string, html: string) {
-  if (!RESEND_KEY) return { ok: false, error: "RESEND_API_KEY missing" };
-  const r = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: MAIL_FROM, to, subject, html }),
-  });
-  if (!r.ok) return { ok: false, error: `resend ${r.status}` };
-  return { ok: true as const };
 }
 
 export async function GET(req: Request) {
@@ -89,7 +77,10 @@ export async function GET(req: Request) {
   </div>
 </body></html>`;
 
-    const r = await send(u.email, subject, html);
+    if (!mailerConfigured()) {
+      continue; // skip silently — digest is best-effort, in-app bell already covers the user
+    }
+    const r = await sendMail(u.email, subject, html);
     if (r.ok) {
       sentCount++;
       await sb.from("profiles").update({ last_digest_at: new Date().toISOString() }).eq("id", u.id);

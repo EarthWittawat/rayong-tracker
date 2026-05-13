@@ -2,8 +2,11 @@
 // Invoked by the client after inserting a comment (task) or
 // issue_comment (issue). Looks up @mentioned users + subscribers /
 // assignee (excluding the commenter), writes per-recipient rows into
-// `public.notifications`, then sends real-time emails via Resend for
-// users whose `notify_mentions` / `notify_replies` preferences are true.
+// `public.notifications`, then sends emails via SMTP (nodemailer over
+// Deno's npm: specifier) for users whose `notify_mentions` /
+// `notify_replies` preferences are true. In-app notifications still
+// fire even when SMTP is not configured — the row insert happens before
+// any email attempt, so the bell works regardless.
 //
 // Payload shapes:
 //   { "comment_id":       "<uuid>" }   // task comment (legacy path)
@@ -11,19 +14,28 @@
 //
 // Deploy:
 //   supabase functions deploy send-mail --no-verify-jwt
-//   supabase secrets set RESEND_API_KEY=...
-//   supabase secrets set MAIL_FROM="Rayong Tracker <board@yourdomain.com>"
-//   supabase secrets set APP_URL=https://your-app.vercel.app
+//   supabase secrets set SMTP_HOST=smtp.gmail.com SMTP_PORT=587 \
+//                        SMTP_USER=you@gmail.com SMTP_PASS=<app-password> \
+//                        MAIL_FROM="SynthCrop Tracker <you@gmail.com>" \
+//                        APP_URL=https://your-app.vercel.app
+//
+// Gmail note: SMTP_PASS must be a 16-character App Password generated at
+// https://myaccount.google.com/apppasswords (requires 2-step verification
+// enabled). The normal account password is rejected by Google.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import nodemailer from "npm:nodemailer@6.9.16";
 
 type Payload =
   | { comment_id: string; issue_comment_id?: undefined }
   | { issue_comment_id: string; comment_id?: undefined };
 
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const MAIL_FROM      = Deno.env.get("MAIL_FROM") ?? "Rayong Tracker <onboarding@resend.dev>";
-const APP_URL        = Deno.env.get("APP_URL") ?? "";
+const SMTP_HOST = Deno.env.get("SMTP_HOST") ?? "";
+const SMTP_PORT = Number(Deno.env.get("SMTP_PORT") ?? 587);
+const SMTP_USER = Deno.env.get("SMTP_USER") ?? "";
+const SMTP_PASS = Deno.env.get("SMTP_PASS") ?? "";
+const MAIL_FROM = Deno.env.get("MAIL_FROM") ?? SMTP_USER;
+const APP_URL   = Deno.env.get("APP_URL") ?? "";
 
 const SUPABASE_URL     = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -45,21 +57,33 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 // ──────────────────────────── helpers ────────────────────────────
 
-async function sendResendMail(to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {
-  if (!RESEND_API_KEY) return { ok: false, error: "RESEND_API_KEY not set" };
-  const r = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ from: MAIL_FROM, to, subject, html }),
+const smtpConfigured = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
+
+// Lazy singleton so we don't open a new TCP connection per recipient inside
+// a single fanout. nodemailer pools internally; reusing the transport just
+// also reuses the auth handshake.
+let _transport: ReturnType<typeof nodemailer.createTransport> | null = null;
+function transport() {
+  if (!smtpConfigured) return null;
+  if (_transport) return _transport;
+  _transport = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465, // 465 implicit TLS; everything else STARTTLS
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
   });
-  if (!r.ok) {
-    const text = await r.text().catch(() => "");
-    return { ok: false, error: `resend ${r.status}: ${text.slice(0, 200)}` };
+  return _transport;
+}
+
+async function sendSmtpMail(to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {
+  const tx = transport();
+  if (!tx) return { ok: false, error: "SMTP env not configured" };
+  try {
+    await tx.sendMail({ from: MAIL_FROM, to, subject, html });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
-  return { ok: true };
 }
 
 function htmlEscape(s: string): string {
@@ -142,8 +166,8 @@ function renderIssueEmail(opts: {
 // ──────────────────────── handlers ────────────────────────
 
 async function handleTaskComment(commentId: string): Promise<Response> {
-  if (!RESEND_API_KEY) {
-    console.warn("[send-mail] RESEND_API_KEY not set — emails will NOT send. Run `supabase secrets set RESEND_API_KEY=...`");
+  if (!smtpConfigured) {
+    console.warn("[send-mail] SMTP env not configured — in-app notifications still fire, but no email will send. Set SMTP_HOST / SMTP_USER / SMTP_PASS / MAIL_FROM secrets.");
   }
   const { data: comment, error: cErr } = await admin
     .from("comments")
@@ -210,7 +234,7 @@ async function handleTaskComment(commentId: string): Promise<Response> {
       isMention,
       attachmentCount,
     });
-    const r = await sendResendMail(p.email, subject, html);
+    const r = await sendSmtpMail(p.email, subject, html);
     if (r.ok) {
       sent++;
       breakdown.push({ user_id: p.id, status: "sent" });
@@ -220,17 +244,17 @@ async function handleTaskComment(commentId: string): Promise<Response> {
         .eq("user_id", p.id)
         .eq("comment_id", comment.id);
     } else {
-      breakdown.push({ user_id: p.id, status: "resend_error", detail: r.error });
-      console.warn("[send-mail] resend failed for", p.email, "->", r.error);
+      breakdown.push({ user_id: p.id, status: "smtp_error", detail: r.error });
+      console.warn("[send-mail] smtp failed for", p.email, "->", r.error);
     }
   }
 
-  return json({ ok: true, queued, sent, recipients: breakdown, resend_key_set: !!RESEND_API_KEY, from: MAIL_FROM });
+  return json({ ok: true, queued, sent, recipients: breakdown, smtp_configured: smtpConfigured, from: MAIL_FROM });
 }
 
 async function handleIssueComment(issueCommentId: string): Promise<Response> {
-  if (!RESEND_API_KEY) {
-    console.warn("[send-mail] RESEND_API_KEY not set — emails will NOT send. Run `supabase secrets set RESEND_API_KEY=...`");
+  if (!smtpConfigured) {
+    console.warn("[send-mail] SMTP env not configured — in-app notifications still fire, but no email will send. Set SMTP_HOST / SMTP_USER / SMTP_PASS / MAIL_FROM secrets.");
   }
   const { data: c, error: cErr } = await admin
     .from("issue_comments")
@@ -301,7 +325,7 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
       issueTitle: issue.title,
       isMention,
     });
-    const r = await sendResendMail(p.email, subject, html);
+    const r = await sendSmtpMail(p.email, subject, html);
     if (r.ok) {
       sent++;
       breakdown.push({ user_id: p.id, status: "sent" });
@@ -311,12 +335,12 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
         .eq("user_id", p.id)
         .eq("issue_comment_id", c.id);
     } else {
-      breakdown.push({ user_id: p.id, status: "resend_error", detail: r.error });
-      console.warn("[send-mail] resend failed for", p.email, "->", r.error);
+      breakdown.push({ user_id: p.id, status: "smtp_error", detail: r.error });
+      console.warn("[send-mail] smtp failed for", p.email, "->", r.error);
     }
   }
 
-  return json({ ok: true, queued, sent, recipients: breakdown, resend_key_set: !!RESEND_API_KEY, from: MAIL_FROM });
+  return json({ ok: true, queued, sent, recipients: breakdown, smtp_configured: smtpConfigured, from: MAIL_FROM });
 }
 
 function json(obj: Record<string, unknown>, status = 200): Response {
