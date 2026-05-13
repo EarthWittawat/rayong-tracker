@@ -214,28 +214,28 @@ export function useStore(identity: Identity | null) {
     return () => { cancelled = true; };
   }, [ready, live, identity?.id, identity?.name, identity?.color, identity?.emoji]);
 
-  // presence + broadcast channel (depends on identity)
+  // presence + broadcast channel.
+  //
+  // Lifetime keyed on (live, identity.id). The old version also re-fired
+  // this effect on every name / color / emoji change, which tore down and
+  // recreated the channel — and on slow networks the new channel had not
+  // finished SUBSCRIBED before we tried to track again, so the second
+  // client ended up tracking into a stale connection and other peers
+  // never saw it. A separate "update tracked meta" effect below handles
+  // identity edits without disturbing the subscription.
   useEffect(() => {
     const sb = getSupabase();
     if (!sb || !live || !identity) {
       broadcastChanRef.current = null;
       return;
     }
+    const myId = identity.id;
     const chan = sb.channel("board-presence", {
       config: {
-        presence: { key: identity.id },
+        presence: { key: myId },
         broadcast: { self: false },
       },
     });
-
-    const selfJoinedAt = Date.now();
-    const selfMeta = {
-      name: identity.name,
-      color: identity.color,
-      emoji: identity.emoji,
-      avatar_url: (identity as { avatar_url?: string | null }).avatar_url ?? null,
-      joinedAt: selfJoinedAt,
-    };
 
     function rebuildPresence() {
       const state = chan.presenceState() as Record<string, Array<{ name: string; color: string; emoji: string; avatar_url?: string | null; joinedAt: number }>>;
@@ -244,33 +244,45 @@ export function useStore(identity: Identity | null) {
       for (const [id, metas] of Object.entries(state)) {
         const meta = metas[0];
         if (!meta) continue;
-        if (id === identity!.id) sawSelf = true;
+        if (id === myId) sawSelf = true;
         list.push({ id, name: meta.name, color: meta.color, emoji: meta.emoji, avatar_url: meta.avatar_url ?? null, joinedAt: meta.joinedAt });
       }
       // Always include self even if `chan.track()` hasn't echoed back yet —
       // otherwise the footer's "Online now" can sit at 0 right after sign-in.
       if (!sawSelf) {
-        list.push({ id: identity!.id, ...selfMeta });
+        list.push({
+          id: myId,
+          name: identity!.name,
+          color: identity!.color,
+          emoji: identity!.emoji,
+          avatar_url: (identity as { avatar_url?: string | null }).avatar_url ?? null,
+          joinedAt: Date.now(),
+        });
       }
       list.sort((a, b) => a.joinedAt - b.joinedAt);
+      if (typeof window !== "undefined" && (window as { __PRESENCE_DEBUG?: boolean }).__PRESENCE_DEBUG) {
+        console.log("[presence] state size", Object.keys(state).length, "list", list.map(p => `${p.name}:${p.id.slice(0, 6)}`));
+      }
       setPresence(list);
     }
-
-    // Seed presence with self immediately so the UI never reports 0 online for the local user.
-    setPresence([{ id: identity.id, ...selfMeta }]);
 
     chan
       .on("presence", { event: "sync" }, rebuildPresence)
       .on("presence", { event: "join" }, rebuildPresence)
       .on("presence", { event: "leave" }, rebuildPresence)
       .on("broadcast", { event: "activity" }, ({ payload }: { payload: ActivityEvent }) => {
-        // Ignore echoes from self (broadcast.self: false should already handle, but be defensive).
-        if (payload.user.id === identity.id) return;
+        if (payload.user.id === myId) return;
         pushActivity(payload);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await chan.track(selfMeta);
+          await chan.track({
+            name: identity!.name,
+            color: identity!.color,
+            emoji: identity!.emoji,
+            avatar_url: (identity as { avatar_url?: string | null }).avatar_url ?? null,
+            joinedAt: Date.now(),
+          });
         }
       });
 
@@ -280,7 +292,21 @@ export function useStore(identity: Identity | null) {
       sb.removeChannel(chan);
       broadcastChanRef.current = null;
     };
-  }, [live, identity?.id, identity?.name, identity?.color, identity?.emoji]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, identity?.id]);
+
+  // Re-track without resubscribing when the user's display meta changes.
+  useEffect(() => {
+    const chan = broadcastChanRef.current;
+    if (!chan || !identity) return;
+    chan.track({
+      name: identity.name,
+      color: identity.color,
+      emoji: identity.emoji,
+      avatar_url: (identity as { avatar_url?: string | null }).avatar_url ?? null,
+      joinedAt: Date.now(),
+    }).catch(() => { /* channel may not be SUBSCRIBED yet — the subscribe callback will track */ });
+  }, [identity?.name, identity?.color, identity?.emoji]);
 
   function emitActivity(partial: Omit<ActivityEvent, "id" | "ts" | "user">) {
     if (!identity) return;
