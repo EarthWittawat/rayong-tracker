@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useIssueByNumber, useIssueComments, useIssueIndex,
   setIssueStatus, updateIssue, deleteIssue,
@@ -11,6 +11,7 @@ import { LabelChip } from "./LabelChip";
 import { MentionInput } from "./MentionInput";
 import { parseMentions, renderRichHTML } from "@/lib/mentions";
 import { formatRelative } from "@/lib/relativeTime";
+import { scrollToHashComment } from "@/lib/notifications";
 import type { Profile } from "@/lib/auth";
 
 export function IssueDetail({
@@ -45,6 +46,10 @@ export function IssueDetail({
   const [bodyDraft, setBodyDraft] = useState("");
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [notify, setNotify] = useState<{ names: string[] } | null>(null);
+
+  // Notification deep-link: when /issues/<n>#c-<commentId> hits, retry-scroll
+  // until the matching comment is in the DOM (comments load async).
+  useEffect(() => scrollToHashComment(), [comments.length]);
 
   if (loading) {
     return <div className="text-center py-10 text-sm text-muted2">loading issue…</div>;
@@ -393,27 +398,10 @@ function IssueCommentBlock({
   }
 
   const html = renderRichHTML(comment.body, profiles);
-  // Deep-link from a notification: scroll into view + flash a ring so the
-  // user can find the comment that pinged them. Hash drives this so we can
-  // keep the page state otherwise unchanged.
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [highlight, setHighlight] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.location.hash !== `#c-${comment.id}`) return;
-    const t = setTimeout(() => {
-      ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-      setHighlight(true);
-      setTimeout(() => setHighlight(false), 2500);
-    }, 150);
-    return () => clearTimeout(t);
-  }, [comment.id]);
-
   return (
     <div
-      ref={ref}
       id={`c-${comment.id}`}
-      className={`rounded-xl2 border bg-surface transition-shadow ${highlight ? "border-good ring-2 ring-good/50" : "border-border"}`}
+      className="rounded-xl2 border border-border bg-surface scroll-mt-24 transition-shadow"
     >
       <div className="px-4 py-2 flex items-center justify-between gap-2 border-b border-border bg-surface2/40">
         <div className="text-xs text-muted">

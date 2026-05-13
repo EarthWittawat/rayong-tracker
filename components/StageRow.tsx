@@ -34,6 +34,24 @@ export function StageRow({
   useEffect(() => { setDoneBuf(String(done)); }, [done]);
   useEffect(() => { setTotalBuf(String(total)); }, [total]);
 
+  // Notification deep-link: when the URL points at this task (e.g.
+  // /?task=<id>#c-<commentId>), auto-open the drawer so the targeted
+  // comment is in the DOM and scrollToHashComment can land on it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function check() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("task") === task.id) setDrawerOpen(true);
+    }
+    check();
+    window.addEventListener("popstate", check);
+    window.addEventListener("hashchange", check);
+    return () => {
+      window.removeEventListener("popstate", check);
+      window.removeEventListener("hashchange", check);
+    };
+  }, [task.id]);
+
   function commitDone(v: string) {
     const n = Math.max(0, Math.min(total, parseInt(v || "0", 10) || 0));
     onChange({ done: n });

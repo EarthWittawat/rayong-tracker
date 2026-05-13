@@ -125,12 +125,53 @@ export function notificationHref(n: NotificationRow): string {
   if (typeof n.payload.whiteboard_slug === "string" && n.payload.whiteboard_slug) {
     return "/board";
   }
-  // Task comment: tasks have no dedicated route, but we still pass the
-  // comment id as a hash so the home board can scroll the matching row.
+  // Task comment: tasks have no dedicated route, but we pass the task id as
+  // a query param (so the home board can auto-open that task's drawer) and
+  // the comment id as a hash (so the browser + our scroll watcher land on
+  // the right row inside the drawer once it renders).
   if (n.task_id) {
-    return n.comment_id ? `/#c-${n.comment_id}` : "/";
+    return n.comment_id ? `/?task=${n.task_id}#c-${n.comment_id}` : `/?task=${n.task_id}`;
   }
   return "/";
+}
+
+// Scroll-and-highlight any element whose id matches the current
+// `#c-<commentId>` hash. Mounted once per page that renders comments;
+// retries for a short window so it works even when comments arrive after
+// the page first paints.
+export function scrollToHashComment(): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  let cancelled = false;
+  let retries = 0;
+  const MAX_RETRIES = 20;
+  const INTERVAL_MS = 150;
+
+  function tryScroll() {
+    if (cancelled) return;
+    const m = window.location.hash.match(/^#c-(.+)$/);
+    if (!m) return;
+    const el = document.getElementById(`c-${m[1]}`);
+    if (!el) {
+      if (retries++ < MAX_RETRIES) setTimeout(tryScroll, INTERVAL_MS);
+      return;
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-good", "border-good");
+    setTimeout(() => el.classList.remove("ring-2", "ring-good", "border-good"), 2500);
+  }
+
+  const t = setTimeout(tryScroll, 100);
+  function onHashChange() {
+    retries = 0;
+    tryScroll();
+  }
+  window.addEventListener("hashchange", onHashChange);
+
+  return () => {
+    cancelled = true;
+    clearTimeout(t);
+    window.removeEventListener("hashchange", onHashChange);
+  };
 }
 
 export function notificationSubject(n: NotificationRow): string {

@@ -19,6 +19,7 @@ import { MatrixView } from "@/components/MatrixView";
 import { CommandPalette } from "@/components/CommandPalette";
 import { IssuesNavLink } from "@/components/IssuesNavLink";
 import { NotificationBell } from "@/components/NotificationBell";
+import { scrollToHashComment } from "@/lib/notifications";
 import { exportTasksCsv, exportTasksJson } from "@/lib/exporters";
 import { PipelineGuide } from "@/components/PipelineGuide";
 import { computeProgress } from "@/lib/progress";
@@ -55,6 +56,11 @@ export default function Page() {
   const [allExpanded, setAllExpanded] = useState<boolean | undefined>(undefined);
   const [view, setView] = useState<"board" | "list" | "matrix">("board");
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Notification deep-link: /?task=<id>#c-<commentId> auto-opens the matching
+  // task drawer (StageRow handles that itself by reading ?task) and scrolls
+  // the comment into view once it lands in the DOM.
+  useEffect(() => scrollToHashComment(), [tasks.length]);
 
   // Persist the view toggle.
   useEffect(() => {
