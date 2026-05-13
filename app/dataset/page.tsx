@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/lib/auth";
 import { LoginGate } from "@/components/LoginGate";
 import { AccessGate } from "@/components/AccessGate";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DatasetStatusCard } from "@/components/DatasetStatusCard";
-import { isLive, getSupabase } from "@/lib/supabase";
+import { DatasetUploader } from "@/components/DatasetUploader";
+import { isLive } from "@/lib/supabase";
 
 type DriveFile = {
   id: string;
@@ -46,13 +47,7 @@ export default function DatasetPage() {
   const [files, setFiles] = useState<DriveFile[] | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
-
-  const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [filter, setFilter] = useState("");
-
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,55 +70,6 @@ export default function DatasetPage() {
     if (!q) return files;
     return files.filter(f => f.name.toLowerCase().includes(q));
   }, [files, filter]);
-
-  const doUpload = useCallback(async (chosen: File[]) => {
-    if (chosen.length === 0) return;
-    const sb = getSupabase();
-    if (!sb) { setUploadMsg("auth not configured"); return; }
-    const { data } = await sb.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) { setUploadMsg("no active session — sign in again"); return; }
-
-    setUploading(true);
-    setUploadMsg(`uploading ${chosen.length} file${chosen.length === 1 ? "" : "s"}…`);
-    const fd = new FormData();
-    for (const f of chosen) fd.append("files", f);
-    try {
-      const r = await fetch("/api/dataset/upload", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-      const j = await r.json();
-      if (!r.ok || !j.ok) {
-        setUploadMsg(`upload failed: ${j.error ?? r.status}`);
-      } else {
-        const okCount = (j.results ?? []).filter((x: { ok: boolean }) => x.ok).length;
-        const failCount = (j.results ?? []).length - okCount;
-        setUploadMsg(`${okCount} uploaded${failCount > 0 ? ` · ${failCount} failed` : ""}`);
-        setRefreshTick(t => t + 1);
-      }
-    } catch (e) {
-      setUploadMsg(`upload error: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setUploading(false);
-    }
-  }, []);
-
-  const onPick = useCallback((evt: React.ChangeEvent<HTMLInputElement>) => {
-    const list = evt.target.files;
-    if (!list || list.length === 0) return;
-    doUpload(Array.from(list));
-    evt.target.value = "";
-  }, [doUpload]);
-
-  const onDrop = useCallback((evt: React.DragEvent<HTMLDivElement>) => {
-    evt.preventDefault();
-    setDragOver(false);
-    const list = evt.dataTransfer.files;
-    if (!list || list.length === 0) return;
-    doUpload(Array.from(list));
-  }, [doUpload]);
 
   if (session.loading) {
     return <div className="min-h-screen flex items-center justify-center text-muted"><span className="text-sm">loading…</span></div>;
@@ -156,32 +102,7 @@ export default function DatasetPage() {
 
         <DatasetStatusCard />
 
-        <section className="rounded-lg border border-border bg-surface p-5 space-y-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted2 font-semibold">Upload</div>
-            <div className="text-xs text-muted">Drop files here or pick from your computer. Files go to the shared dataset folder.</div>
-          </div>
-          <div
-            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
-            onClick={() => inputRef.current?.click()}
-            className={`rounded-md border-2 border-dashed transition-colors cursor-pointer px-4 py-8 text-center ${dragOver ? "border-good bg-good/10" : "border-border bg-surface2 hover:border-muted"}`}
-          >
-            <input
-              ref={inputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={onPick}
-            />
-            <div className="text-sm text-ink font-medium">{uploading ? "uploading…" : "click or drop files"}</div>
-            <div className="text-[11px] text-muted2 mt-1">CSV · Parquet · TIF · NPY · PNG · GeoJSON · anything</div>
-            {uploadMsg && (
-              <div className="text-[11px] text-muted mt-3 tabular">{uploadMsg}</div>
-            )}
-          </div>
-        </section>
+        <DatasetUploader onUploaded={() => setRefreshTick(t => t + 1)} />
 
         <section className="rounded-lg border border-border bg-surface p-5 space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">

@@ -101,6 +101,43 @@ export async function listDataset(): Promise<DriveFile[]> {
   return out;
 }
 
+// Resumable upload: server-side initiates a session and returns the upload URL
+// (a single-use, signed Google URL). The browser then PUTs the file in chunks
+// directly to Google — bypassing the function's request body cap entirely.
+//
+// Google docs: https://developers.google.com/drive/api/guides/manage-uploads#resumable
+export async function initResumableUpload(
+  filename: string,
+  mimeType: string,
+  sizeBytes: number,
+  metadata: Record<string, string> = {},
+): Promise<string> {
+  const token = await getAccessToken();
+  const fileMeta = {
+    name: filename,
+    parents: [DATASET_FOLDER_ID],
+    mimeType,
+    appProperties: metadata,
+  };
+  const r = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": mimeType,
+        "X-Upload-Content-Length": String(sizeBytes),
+      },
+      body: JSON.stringify(fileMeta),
+    },
+  );
+  if (!r.ok) throw new Error(`init resumable failed: ${r.status} ${await r.text()}`);
+  const uploadUrl = r.headers.get("location");
+  if (!uploadUrl) throw new Error("no Location header on resumable init");
+  return uploadUrl;
+}
+
 export async function uploadDatasetFile(
   filename: string,
   mimeType: string,
