@@ -20,6 +20,8 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { IssuesNavLink } from "@/components/IssuesNavLink";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AdminBroadcast } from "@/components/AdminBroadcast";
+import { BroadcastSpotlight } from "@/components/BroadcastSpotlight";
+import { QuickBroadcastButton } from "@/components/QuickBroadcastButton";
 import { isAdmin } from "@/lib/admin";
 import { scrollToHashComment } from "@/lib/notifications";
 import { exportTasksCsv, exportTasksJson } from "@/lib/exporters";
@@ -281,6 +283,7 @@ export default function Page() {
               <span className="tabular">search</span>
               <kbd className="ml-1 text-[9px] tabular px-1 py-0.5 rounded border border-border bg-surface2">Ctrl K</kbd>
             </button>
+            <QuickBroadcastButton profile={profile} profiles={profiles} />
             <NotificationBell />
             <ThemeToggle />
             <div className="relative">
@@ -719,6 +722,8 @@ export default function Page() {
           onClose={() => setShowBroadcast(false)}
         />
       )}
+
+      <BroadcastSpotlight />
 
       <CommandPalette
         open={paletteOpen}

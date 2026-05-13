@@ -7,6 +7,8 @@ import { LoginGate } from "@/components/LoginGate";
 import { AccessGate } from "@/components/AccessGate";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
+import { BroadcastSpotlight } from "@/components/BroadcastSpotlight";
+import { QuickBroadcastButton } from "@/components/QuickBroadcastButton";
 import { IssueDetail } from "@/components/IssueDetail";
 import { isLive } from "@/lib/supabase";
 
@@ -55,6 +57,7 @@ export default function IssueDetailRoute() {
           </div>
           <div className="flex items-center gap-2">
             <Link href="/issues" className="text-[11px] eyebrow px-2.5 py-1.5 rounded-md border border-white/20 nav-muted hover:nav-ink hover:bg-white/5">← all</Link>
+            <QuickBroadcastButton profile={session.profile} profiles={profiles} />
             <NotificationBell />
             <ThemeToggle />
           </div>
@@ -65,6 +68,7 @@ export default function IssueDetailRoute() {
       <div className="max-w-[1100px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <IssueDetail number={number} profile={session.profile} profiles={profiles} />
       </div>
+      <BroadcastSpotlight />
     </main>
   );
 }
