@@ -19,6 +19,8 @@ import { MatrixView } from "@/components/MatrixView";
 import { CommandPalette } from "@/components/CommandPalette";
 import { IssuesNavLink } from "@/components/IssuesNavLink";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AdminBroadcast } from "@/components/AdminBroadcast";
+import { isAdmin } from "@/lib/admin";
 import { scrollToHashComment } from "@/lib/notifications";
 import { exportTasksCsv, exportTasksJson } from "@/lib/exporters";
 import { PipelineGuide } from "@/components/PipelineGuide";
@@ -54,6 +56,7 @@ export default function Page() {
   const [undo, setUndo] = useState<{ name: string; restore: () => Promise<void> } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAccess, setShowAccess] = useState(false);
+  const [showBroadcast, setShowBroadcast] = useState(false);
 
   // member-grid filters / view
   const [query, setQuery] = useState("");
@@ -311,6 +314,15 @@ export default function Page() {
                     onClick={() => { setShowAccess(true); setMenuOpen(false); }}
                     className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink"
                   >Manage access</button>
+                  {isAdmin(profile) && (
+                    <button
+                      onClick={() => { setShowBroadcast(true); setMenuOpen(false); }}
+                      className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink inline-flex items-center justify-between"
+                    >
+                      <span>📣 Send broadcast</span>
+                      <span className="text-[9px] uppercase tracking-wider text-muted2 font-semibold px-1.5 py-0.5 rounded border border-border">admin</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => { setMenuOpen(false); setPaletteOpen(true); }}
                     className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink inline-flex items-center justify-between"
@@ -699,6 +711,14 @@ export default function Page() {
         onClose={() => setShowAccess(false)}
         currentUserId={profile.id}
       />
+
+      {showBroadcast && isAdmin(profile) && (
+        <AdminBroadcast
+          profile={profile}
+          profiles={profiles}
+          onClose={() => setShowBroadcast(false)}
+        />
+      )}
 
       <CommandPalette
         open={paletteOpen}

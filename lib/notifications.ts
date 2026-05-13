@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getSupabase } from "./supabase";
 
-export type NotificationKind = "mention" | "reply" | "progress";
+export type NotificationKind = "mention" | "reply" | "progress" | "broadcast";
 
 export type NotificationRow = {
   id: string;
@@ -115,6 +115,8 @@ export function useNotifications(userId: string | undefined) {
 }
 
 export function notificationHref(n: NotificationRow): string {
+  // Broadcasts carry no link target — clicking just marks them read.
+  if (n.kind === "broadcast") return "/notifications";
   // Issue comment: deep-link to the comment so the IssueDetail page scrolls
   // and highlights it on mount.
   if (n.issue_id && n.payload.issue_number) {
@@ -176,6 +178,10 @@ export function scrollToHashComment(): () => void {
 }
 
 export function notificationSubject(n: NotificationRow): string {
+  if (n.kind === "broadcast") {
+    const title = typeof n.payload.title === "string" && n.payload.title ? n.payload.title : "announcement";
+    return title;
+  }
   if (n.payload.issue_title) return `#${n.payload.issue_number} ${n.payload.issue_title}`;
   if (typeof n.payload.whiteboard_slug === "string" && n.payload.whiteboard_slug) {
     return `the whiteboard`;
@@ -186,6 +192,7 @@ export function notificationSubject(n: NotificationRow): string {
 export function verbFor(kind: NotificationKind): string {
   if (kind === "mention") return "mentioned you";
   if (kind === "reply") return "replied";
+  if (kind === "broadcast") return "sent a broadcast";
   return "updated progress";
 }
 
