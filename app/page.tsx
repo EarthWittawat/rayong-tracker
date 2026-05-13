@@ -268,14 +268,6 @@ export default function Page() {
             </button>
             <NotificationBell />
             <ThemeToggle />
-            <button
-              onClick={handleAdd}
-              className="hidden md:inline-flex items-center gap-1.5 text-[11px] eyebrow px-3 py-2 rounded-sm bg-[rgb(var(--c-accent))] text-white hover:brightness-110 transition-all"
-              title="Add a manual member"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-              <span>add member</span>
-            </button>
             <div className="relative">
               <button
                 onClick={() => setMenuOpen(o => !o)}
@@ -307,10 +299,6 @@ export default function Page() {
                     onClick={() => { setShowAccess(true); setMenuOpen(false); }}
                     className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink"
                   >Manage access</button>
-                  <button
-                    onClick={handleAdd}
-                    className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink md:hidden"
-                  >+ add member</button>
                   <button
                     onClick={() => { setMenuOpen(false); setPaletteOpen(true); }}
                     className="w-full text-left text-xs px-3 py-2 hover:bg-surface2 text-ink inline-flex items-center justify-between"
