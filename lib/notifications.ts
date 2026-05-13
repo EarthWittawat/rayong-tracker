@@ -10,6 +10,20 @@ import { getSupabase } from "./supabase";
 
 export type NotificationKind = "mention" | "reply" | "progress" | "broadcast";
 
+export type BroadcastTopic = "notebook" | "webapp" | "release" | "general";
+
+export const BROADCAST_TOPICS: { id: BroadcastTopic; label: string; icon: string }[] = [
+  { id: "notebook", label: "Notebook", icon: "📓" },
+  { id: "webapp",   label: "Webapp",   icon: "💻" },
+  { id: "release",  label: "Release",  icon: "🚀" },
+  { id: "general",  label: "General",  icon: "📣" },
+];
+
+export function topicIcon(topic: string | undefined | null): string {
+  const hit = BROADCAST_TOPICS.find(t => t.id === topic);
+  return hit?.icon ?? "📣";
+}
+
 export type NotificationRow = {
   id: string;
   user_id: string;
@@ -179,8 +193,9 @@ export function scrollToHashComment(): () => void {
 
 export function notificationSubject(n: NotificationRow): string {
   if (n.kind === "broadcast") {
+    const topic = typeof n.payload.topic === "string" ? n.payload.topic : "general";
     const title = typeof n.payload.title === "string" && n.payload.title ? n.payload.title : "announcement";
-    return title;
+    return `${topicIcon(topic)} ${title}`;
   }
   if (n.payload.issue_title) return `#${n.payload.issue_number} ${n.payload.issue_title}`;
   if (typeof n.payload.whiteboard_slug === "string" && n.payload.whiteboard_slug) {

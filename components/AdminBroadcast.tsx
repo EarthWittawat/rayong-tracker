@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import type { Profile } from "@/lib/auth";
+import { BROADCAST_TOPICS, type BroadcastTopic } from "@/lib/notifications";
 
 // Admin-only broadcast composer. Inserts a `kind = 'broadcast'` notification
-// row for every profile in `profiles`, with the title + body in the payload.
-// Recipients see the broadcast in their bell with a 📣 prefix (handled by
-// NotificationBell + the history page).
+// row for every profile in `profiles`, with the title + body + topic in the
+// payload. The topic feeds the icon + colour in the bell / history rows.
 export function AdminBroadcast({
   profile, profiles, onClose,
 }: {
@@ -15,6 +15,7 @@ export function AdminBroadcast({
   profiles: Profile[];
   onClose: () => void;
 }) {
+  const [topic, setTopic] = useState<BroadcastTopic>("general");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [includeSelf, setIncludeSelf] = useState(false);
@@ -44,6 +45,8 @@ export function AdminBroadcast({
         title: titleTrim || null,
         snippet: bodyTrim.slice(0, 240),
         full: bodyTrim,
+        topic,
+        source: "manual",
       },
     }));
     const { error } = await sb.from("notifications").insert(rows);
@@ -69,6 +72,21 @@ export function AdminBroadcast({
         </div>
 
         <div className="p-4 space-y-3">
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted2 font-semibold">Topic</label>
+            <div className="mt-1 grid grid-cols-4 gap-1.5">
+              {BROADCAST_TOPICS.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setTopic(t.id)}
+                  className={`text-[11px] px-2 py-1.5 rounded-md border transition-colors ${topic === t.id ? "border-ink bg-ink text-bg" : "border-border bg-surface2 text-ink hover:border-muted"}`}
+                  title={t.label}
+                >
+                  <span>{t.icon}</span> <span>{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <label className="text-[10px] uppercase tracking-wider text-muted2 font-semibold">Title (optional)</label>
             <input
