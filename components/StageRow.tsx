@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import type { Task } from "@/lib/supabase";
 import type { SaveState, ActivityEvent } from "@/lib/useStore";
 import type { Profile } from "@/lib/auth";
@@ -37,18 +38,26 @@ export function StageRow({
   // Notification deep-link: when the URL points at this task (e.g.
   // /?task=<id>#c-<commentId>), auto-open the drawer so the targeted
   // comment is in the DOM and scrollToHashComment can land on it.
+  //
+  // useSearchParams is reactive — same-route clicks from the notification
+  // bell (Next.js Link without pathname change) still re-render this and
+  // re-check. The hashchange listener covers the inverse case where only
+  // the hash changes between two notifications.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (searchParams?.get("task") === task.id) setDrawerOpen(true);
+  }, [searchParams, task.id]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     function check() {
       const params = new URLSearchParams(window.location.search);
       if (params.get("task") === task.id) setDrawerOpen(true);
     }
-    check();
-    window.addEventListener("popstate", check);
     window.addEventListener("hashchange", check);
+    window.addEventListener("popstate", check);
     return () => {
-      window.removeEventListener("popstate", check);
       window.removeEventListener("hashchange", check);
+      window.removeEventListener("popstate", check);
     };
   }, [task.id]);
 

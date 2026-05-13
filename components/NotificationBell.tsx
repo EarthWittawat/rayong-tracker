@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/auth";
 import {
   fmtAgo,
   notificationHref,
   notificationSubject,
+  runScrollToHashComment,
   useNotifications,
   verbFor,
   type NotificationRow,
@@ -14,6 +16,7 @@ import {
 
 export function NotificationBell() {
   const session = useSession();
+  const router = useRouter();
   const userId = session.user?.id;
   const { items, unreadCount, markRead, markAllRead } = useNotifications(userId);
 
@@ -77,7 +80,19 @@ export function NotificationBell() {
             ) : (
               <ul className="divide-y divide-border">
                 {recent.map(n => (
-                  <NotificationRowItem key={n.id} n={n} onOpen={() => { markRead(n.id); setOpen(false); }} />
+                  <NotificationRowItem
+                    key={n.id}
+                    n={n}
+                    onOpen={() => {
+                      markRead(n.id);
+                      setOpen(false);
+                      // Navigate via router so same-route clicks still update
+                      // search + hash, then kick off the scroll retry to
+                      // catch the case where useEffect deps don't change.
+                      router.push(notificationHref(n));
+                      setTimeout(runScrollToHashComment, 50);
+                    }}
+                  />
                 ))}
               </ul>
             )}
@@ -97,9 +112,17 @@ function NotificationRowItem({ n, onOpen }: { n: NotificationRow; onOpen: () => 
 
   return (
     <li>
-      <Link
+      {/* Anchor for middle-click / new-tab affordance, but click is handled
+          by onOpen which routes + kicks off the scroll retry — Next.js
+          Link's default navigation skips firing the hashchange-based
+          scroll path when the route doesn't change. */}
+      <a
         href={href}
-        onClick={onOpen}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+          e.preventDefault();
+          onOpen();
+        }}
         className={`block px-3 py-2.5 hover:bg-surface2 ${n.read_at ? "" : "bg-good/[0.04]"}`}
       >
         <div className="flex items-start gap-2">
@@ -116,7 +139,7 @@ function NotificationRowItem({ n, onOpen }: { n: NotificationRow; onOpen: () => 
             <div className="text-[10px] text-muted2 tabular mt-0.5">{fmtAgo(n.created_at)}</div>
           </div>
         </div>
-      </Link>
+      </a>
     </li>
   );
 }

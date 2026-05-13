@@ -95,6 +95,22 @@ h1, h2, h3 { letter-spacing: -0.018em; }
 }
 .pulse-soft { animation: pulse-soft 2.4s ease-in-out infinite; }
 
+/* Spotlight pulse used by scrollToHashComment so the deep-linked comment
+   is easy to spot after the page navigates. Outline + double-pulse ring
+   expand and fade, then settle. */
+@keyframes comment-spotlight {
+  0%   { box-shadow: 0 0 0 0    rgb(var(--c-good) / 0.55); transform: scale(1); }
+  35%  { box-shadow: 0 0 0 16px rgb(var(--c-good) / 0.20); transform: scale(1.01); }
+  100% { box-shadow: 0 0 0 32px rgb(var(--c-good) / 0);    transform: scale(1); }
+}
+.comment-spotlight {
+  animation: comment-spotlight 1.4s ease-out 2;
+  outline: 2px solid rgb(var(--c-good) / 0.65);
+  outline-offset: 2px;
+  border-radius: 14px;
+  transition: outline-color 600ms ease-out;
+}
+
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none; margin: 0;

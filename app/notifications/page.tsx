@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useSession } from "@/lib/auth";
 import { LoginGate } from "@/components/LoginGate";
@@ -11,6 +12,7 @@ import {
   fmtAgo,
   notificationHref,
   notificationSubject,
+  runScrollToHashComment,
   useNotifications,
   verbFor,
 } from "@/lib/notifications";
@@ -21,6 +23,7 @@ export default function NotificationsPage() {
   const supaConfigured = isLive();
   const session = useSession();
   const userId = session.user?.id;
+  const router = useRouter();
   const { items, loading, unreadCount, markRead, markAllRead } = useNotifications(userId);
 
   const [filter, setFilter] = useState<Filter>("all");
@@ -111,9 +114,15 @@ export default function NotificationsPage() {
 
               return (
                 <li key={n.id}>
-                  <Link
+                  <a
                     href={href}
-                    onClick={() => markRead(n.id)}
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                      e.preventDefault();
+                      markRead(n.id);
+                      router.push(href);
+                      setTimeout(runScrollToHashComment, 50);
+                    }}
                     className={`block px-4 py-3 hover:bg-surface2 ${n.read_at ? "" : "bg-good/[0.04]"}`}
                   >
                     <div className="flex items-start gap-3">
@@ -136,7 +145,7 @@ export default function NotificationsPage() {
                         </div>
                       </div>
                     </div>
-                  </Link>
+                  </a>
                 </li>
               );
             })}

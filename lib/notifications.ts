@@ -135,19 +135,17 @@ export function notificationHref(n: NotificationRow): string {
   return "/";
 }
 
-// Scroll-and-highlight any element whose id matches the current
-// `#c-<commentId>` hash. Mounted once per page that renders comments;
-// retries for a short window so it works even when comments arrive after
-// the page first paints.
-export function scrollToHashComment(): () => void {
-  if (typeof window === "undefined") return () => undefined;
-  let cancelled = false;
+// Fire one scroll-retry attempt: find #c-<id> in the DOM (retrying for a few
+// seconds because comments load async), scroll it into view, and apply the
+// spotlight class so the reader can see where they landed. Safe to call
+// repeatedly; cancels nothing, just kicks off a fresh retry loop.
+export function runScrollToHashComment(): void {
+  if (typeof window === "undefined") return;
   let retries = 0;
-  const MAX_RETRIES = 20;
+  const MAX_RETRIES = 30;          // ~4.5 s window
   const INTERVAL_MS = 150;
 
   function tryScroll() {
-    if (cancelled) return;
     const m = window.location.hash.match(/^#c-(.+)$/);
     if (!m) return;
     const el = document.getElementById(`c-${m[1]}`);
@@ -156,22 +154,25 @@ export function scrollToHashComment(): () => void {
       return;
     }
     el.scrollIntoView({ behavior: "smooth", block: "center" });
-    el.classList.add("ring-2", "ring-good", "border-good");
-    setTimeout(() => el.classList.remove("ring-2", "ring-good", "border-good"), 2500);
+    el.classList.remove("comment-spotlight");
+    // Force reflow so the animation restarts even if the class is re-added
+    // on a second click while still highlighted.
+    void el.offsetWidth;
+    el.classList.add("comment-spotlight");
+    setTimeout(() => el.classList.remove("comment-spotlight"), 3000);
   }
+  setTimeout(tryScroll, 80);
+}
 
-  const t = setTimeout(tryScroll, 100);
-  function onHashChange() {
-    retries = 0;
-    tryScroll();
-  }
+// Mount once per page that renders comments. Re-runs the scroll retry on
+// every hashchange so clicking a second notification while still on the
+// same page picks up the new target.
+export function scrollToHashComment(): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  runScrollToHashComment();
+  function onHashChange() { runScrollToHashComment(); }
   window.addEventListener("hashchange", onHashChange);
-
-  return () => {
-    cancelled = true;
-    clearTimeout(t);
-    window.removeEventListener("hashchange", onHashChange);
-  };
+  return () => window.removeEventListener("hashchange", onHashChange);
 }
 
 export function notificationSubject(n: NotificationRow): string {
