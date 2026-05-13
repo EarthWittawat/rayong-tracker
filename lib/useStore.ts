@@ -266,6 +266,19 @@ export function useStore(identity: Identity | null) {
       setPresence(list);
     }
 
+    // Seed the local presence list with self immediately. The "sync" event
+    // will overwrite this with the real channel state once it arrives, but
+    // if Realtime is slow / blocked the user at least sees themself online
+    // — and rebuildPresence's self-fallback keeps the row stable thereafter.
+    setPresence([{
+      id: myId,
+      name: identity.name,
+      color: identity.color,
+      emoji: identity.emoji,
+      avatar_url: (identity as { avatar_url?: string | null }).avatar_url ?? null,
+      joinedAt: Date.now(),
+    }]);
+
     chan
       .on("presence", { event: "sync" }, rebuildPresence)
       .on("presence", { event: "join" }, rebuildPresence)
@@ -275,14 +288,24 @@ export function useStore(identity: Identity | null) {
         pushActivity(payload);
       })
       .subscribe(async (status) => {
+        if (typeof window !== "undefined" && (window as { __PRESENCE_DEBUG?: boolean }).__PRESENCE_DEBUG) {
+          console.log("[presence] subscribe status:", status);
+        }
         if (status === "SUBSCRIBED") {
-          await chan.track({
+          const trackResult = await chan.track({
             name: identity!.name,
             color: identity!.color,
             emoji: identity!.emoji,
             avatar_url: (identity as { avatar_url?: string | null }).avatar_url ?? null,
             joinedAt: Date.now(),
           });
+          if (typeof window !== "undefined" && (window as { __PRESENCE_DEBUG?: boolean }).__PRESENCE_DEBUG) {
+            console.log("[presence] track result:", trackResult);
+          }
+          // Force a rebuild AFTER track() so the local seed gets overwritten
+          // with the canonical channel state — covers the case where the
+          // "sync" event already fired before our subscribe handler ran.
+          rebuildPresence();
         }
       });
 
