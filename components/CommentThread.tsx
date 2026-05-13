@@ -133,7 +133,7 @@ export function CommentThread({
           const atts = attachments[c.id] ?? [];
           const isMine = c.author_id === profile.id;
           return (
-            <div key={c.id} className="flex gap-2">
+            <div key={c.id} id={`c-${c.id}`} className="flex gap-2 scroll-mt-24">
               <div className="shrink-0">
                 {author?.avatar_url ? (
                   <img src={author.avatar_url} alt={author.name}

@@ -115,11 +115,30 @@ export function useNotifications(userId: string | undefined) {
 }
 
 export function notificationHref(n: NotificationRow): string {
+  // Issue comment: deep-link to the comment so the IssueDetail page scrolls
+  // and highlights it on mount.
   if (n.issue_id && n.payload.issue_number) {
-    return `/issues/${n.payload.issue_number}`;
+    const base = `/issues/${n.payload.issue_number}`;
+    return n.issue_comment_id ? `${base}#c-${n.issue_comment_id}` : base;
   }
-  // Tasks have no dedicated route; the comment lives on the home board.
+  // Whiteboard mention: no comments, just open the board.
+  if (typeof n.payload.whiteboard_slug === "string" && n.payload.whiteboard_slug) {
+    return "/board";
+  }
+  // Task comment: tasks have no dedicated route, but we still pass the
+  // comment id as a hash so the home board can scroll the matching row.
+  if (n.task_id) {
+    return n.comment_id ? `/#c-${n.comment_id}` : "/";
+  }
   return "/";
+}
+
+export function notificationSubject(n: NotificationRow): string {
+  if (n.payload.issue_title) return `#${n.payload.issue_number} ${n.payload.issue_title}`;
+  if (typeof n.payload.whiteboard_slug === "string" && n.payload.whiteboard_slug) {
+    return `the whiteboard`;
+  }
+  return "a task";
 }
 
 export function verbFor(kind: NotificationKind): string {

@@ -6,6 +6,7 @@ import { useSession } from "@/lib/auth";
 import {
   fmtAgo,
   notificationHref,
+  notificationSubject,
   useNotifications,
   verbFor,
   type NotificationRow,
@@ -92,9 +93,7 @@ function NotificationRowItem({ n, onOpen }: { n: NotificationRow; onOpen: () => 
   const author = n.payload.author_name ?? "Someone";
   const verb = verbFor(n.kind);
   const snippet = (n.payload.snippet ?? "").slice(0, 140);
-  const subject = n.payload.issue_title
-    ? `#${n.payload.issue_number} ${n.payload.issue_title}`
-    : "a task";
+  const subject = notificationSubject(n);
 
   return (
     <li>

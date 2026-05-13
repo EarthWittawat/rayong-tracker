@@ -5,7 +5,36 @@ import dynamic from "next/dynamic";
 import "@excalidraw/excalidraw/index.css";
 import type { Profile } from "@/lib/auth";
 import { useWhiteboard } from "@/lib/whiteboard";
+import { getSupabase } from "@/lib/supabase";
 import { WhiteboardRefPicker, type RefPick } from "./WhiteboardRefPicker";
+
+// Merge incoming remote elements with the local Excalidraw scene, keeping the
+// element with the highest `version` per id. Without this the last whoever
+// saves wins and concurrent edits clobber each other — each client saves the
+// full scene to a single row and the realtime echo overwrites in-flight work
+// from the other side. With per-element versions Excalidraw already supplies,
+// reconciliation is just a max-by-version reduce.
+//
+// (We don't try to merge appState — selections, viewport, zoom etc. are
+// intentionally local-only.)
+type ExcalidrawElement = { id: string; version?: number; versionNonce?: number; [k: string]: unknown };
+
+function reconcileElements(local: readonly ExcalidrawElement[], remote: ExcalidrawElement[]): ExcalidrawElement[] {
+  const byId = new Map<string, ExcalidrawElement>();
+  for (const e of local) byId.set(e.id, e);
+  for (const r of remote) {
+    const l = byId.get(r.id);
+    if (!l) {
+      byId.set(r.id, r);
+      continue;
+    }
+    const lv = l.version ?? 0;
+    const rv = r.version ?? 0;
+    if (rv > lv) byId.set(r.id, r);
+    else if (rv === lv && (r.versionNonce ?? 0) > (l.versionNonce ?? 0)) byId.set(r.id, r);
+  }
+  return Array.from(byId.values());
+}
 
 // Excalidraw is client-only + ~1.5 MB. Lazy-load so the rest of the app
 // doesn't pay the bundle.
@@ -45,13 +74,17 @@ export function Whiteboard({ slug, profile, profiles }: { slug: string; profile:
     return () => mo.disconnect();
   }, []);
 
-  // Apply remote scene updates to the Excalidraw canvas.
+  // Apply remote scene updates to the Excalidraw canvas, reconciling per
+  // element so concurrent edits don't clobber each other.
   useEffect(() => {
     if (!scene || !apiRef.current) return;
     if (scene.updatedAt === remoteAppliedAtRef.current) return;
     remoteAppliedAtRef.current = scene.updatedAt;
+    const local = apiRef.current.getSceneElements() as readonly ExcalidrawElement[];
+    const remote = (Array.isArray(scene.elements) ? scene.elements : []) as ExcalidrawElement[];
+    const merged = reconcileElements(local, remote);
     apiRef.current.updateScene({
-      elements: scene.elements,
+      elements: merged,
       // Don't bleed appState across users (selections, viewport, etc.)
       // — just trust local appState after the first load.
     });
@@ -107,7 +140,28 @@ export function Whiteboard({ slug, profile, profiles }: { slug: string; profile:
       } as never,
     ]);
     api.updateScene({ elements: [...api.getSceneElements(), ...created] });
-  }, []);
+
+    // Fire an in-app notification when the inserted reference is an @user
+    // mention of someone other than the inserter. The send-mail Edge
+    // Function only watches comments, so whiteboard mentions need to write
+    // straight into public.notifications themselves. RLS allows any
+    // authenticated user to insert.
+    if (pick.kind === "user" && pick.userId && pick.userId !== profile.id) {
+      const sb = getSupabase();
+      if (sb) {
+        await sb.from("notifications").insert({
+          user_id: pick.userId,
+          kind: "mention",
+          payload: {
+            author_id: profile.id,
+            author_name: profile.name,
+            snippet: `mentioned you on the whiteboard`,
+            whiteboard_slug: slug,
+          },
+        });
+      }
+    }
+  }, [profile.id, profile.name, slug]);
 
   if (loading) {
     return (

@@ -10,6 +10,7 @@ import { isLive } from "@/lib/supabase";
 import {
   fmtAgo,
   notificationHref,
+  notificationSubject,
   useNotifications,
   verbFor,
 } from "@/lib/notifications";
@@ -105,9 +106,7 @@ export default function NotificationsPage() {
             {filtered.map(n => {
               const href = notificationHref(n);
               const author = n.payload.author_name ?? "Someone";
-              const subject = n.payload.issue_title
-                ? `#${n.payload.issue_number} ${n.payload.issue_title}`
-                : "a task";
+              const subject = notificationSubject(n);
               const snippet = (n.payload.snippet ?? "").slice(0, 240);
 
               return (

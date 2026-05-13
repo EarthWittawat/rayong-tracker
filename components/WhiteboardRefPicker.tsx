@@ -9,6 +9,9 @@ export type RefPick = {
   label: string;
   link: string;       // absolute URL, e.g. https://host/issues/3
   color: string;      // text colour for the inserted element
+  kind?: "user" | "issue" | "task";
+  userId?: string;    // present when kind === "user" — used to fire a notification
+  userName?: string;  // mentioned user's display name (for the notification snippet)
 };
 
 const STAGE_LABELS: Record<string, string> = {
@@ -75,6 +78,9 @@ export function WhiteboardRefPicker({
       label: `@${p.name}`,
       link:  `${originRoot()}/`,
       color: p.color,
+      kind: "user",
+      userId: p.id,
+      userName: p.name,
     });
   }
 
@@ -83,6 +89,7 @@ export function WhiteboardRefPicker({
       label: `#${i.number} ${i.title}`,
       link:  `${originRoot()}/issues/${i.number}`,
       color: "#1971C2",
+      kind: "issue",
     });
   }
 
@@ -92,6 +99,7 @@ export function WhiteboardRefPicker({
       label: `${member.emoji} ${member.name} · ${stageLabel}`,
       link:  `${originRoot()}/#member-${member.id}`,
       color: member.color,
+      kind: "task",
     });
   }
 
