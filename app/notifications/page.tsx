@@ -24,7 +24,7 @@ export default function NotificationsPage() {
   const session = useSession();
   const userId = session.user?.id;
   const router = useRouter();
-  const { items, loading, unreadCount, markRead, markAllRead } = useNotifications(userId);
+  const { items, loading, unreadCount, markRead, markAllRead, remove, clearRead, clearAll } = useNotifications(userId);
 
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -88,12 +88,28 @@ export default function NotificationsPage() {
               </button>
             ))}
           </div>
-          {unreadCount > 0 && (
-            <button
-              onClick={() => markAllRead()}
-              className="text-[11px] px-2.5 py-1.5 rounded-md border border-border bg-surface text-ink hover:bg-surface2"
-            >mark all read</button>
-          )}
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <button
+                onClick={() => markAllRead()}
+                className="text-[11px] px-2.5 py-1.5 rounded-md border border-border bg-surface text-ink hover:bg-surface2"
+              >mark all read</button>
+            )}
+            {items.some(n => n.read_at) && (
+              <button
+                onClick={() => clearRead()}
+                className="text-[11px] px-2.5 py-1.5 rounded-md border border-border bg-surface text-ink hover:bg-surface2"
+                title="delete every already-read notification"
+              >clear read</button>
+            )}
+            {items.length > 0 && (
+              <button
+                onClick={() => { if (confirm(`Delete all ${items.length} notifications? This cannot be undone.`)) clearAll(); }}
+                className="text-[11px] px-2.5 py-1.5 rounded-md border border-crit/40 bg-surface text-crit hover:bg-crit/10"
+                title="delete everything for this user"
+              >clear all</button>
+            )}
+          </div>
         </div>
 
         {loading && <div className="text-xs text-muted2 py-4">loading…</div>}
@@ -113,7 +129,13 @@ export default function NotificationsPage() {
               const snippet = (n.payload.snippet ?? "").slice(0, 240);
 
               return (
-                <li key={n.id}>
+                <li key={n.id} className="group relative">
+                  <button
+                    onClick={() => remove(n.id)}
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-muted2 hover:text-crit text-base leading-none w-6 h-6 flex items-center justify-center rounded transition-opacity"
+                    title="remove this notification"
+                    aria-label="remove notification"
+                  >×</button>
                   <a
                     href={href}
                     onClick={(e) => {

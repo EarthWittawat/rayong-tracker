@@ -100,6 +100,15 @@ export function useNotifications(userId: string | undefined) {
           setItems(prev => prev.map(p => (p.id === row.id ? row : p)));
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const old = payload.old as Partial<NotificationRow>;
+          if (!old?.id) return;
+          setItems(prev => prev.filter(p => p.id !== old.id));
+        },
+      )
       .subscribe();
     return () => { sb.removeChannel(ch); };
   }, [userId]);
@@ -123,9 +132,43 @@ export function useNotifications(userId: string | undefined) {
       .is("read_at", null);
   }, [userId]);
 
+  // Remove a single row. The optimistic update + realtime DELETE event
+  // both drop the row from local state, so the bell list stays in sync
+  // even when another tab triggered the delete.
+  const remove = useCallback(async (id: string) => {
+    const sb = getSupabase();
+    if (!sb) return;
+    setItems(prev => prev.filter(p => p.id !== id));
+    await sb.from("notifications").delete().eq("id", id);
+  }, []);
+
+  // Bulk-clear: removes every already-read row for this user. Unread rows
+  // are left alone — clearing those would suppress a notification the
+  // user has not actually seen yet.
+  const clearRead = useCallback(async () => {
+    if (!userId) return;
+    const sb = getSupabase();
+    if (!sb) return;
+    setItems(prev => prev.filter(p => !p.read_at));
+    await sb.from("notifications")
+      .delete()
+      .eq("user_id", userId)
+      .not("read_at", "is", null);
+  }, [userId]);
+
+  // Nuke everything for this user (read or unread). Behind a confirm in
+  // the UI because there is no undo.
+  const clearAll = useCallback(async () => {
+    if (!userId) return;
+    const sb = getSupabase();
+    if (!sb) return;
+    setItems([]);
+    await sb.from("notifications").delete().eq("user_id", userId);
+  }, [userId]);
+
   const unreadCount = items.reduce((n, p) => n + (p.read_at ? 0 : 1), 0);
 
-  return { items, loading, unreadCount, markRead, markAllRead };
+  return { items, loading, unreadCount, markRead, markAllRead, remove, clearRead, clearAll };
 }
 
 export function notificationHref(n: NotificationRow): string {

@@ -18,7 +18,7 @@ export function NotificationBell() {
   const session = useSession();
   const router = useRouter();
   const userId = session.user?.id;
-  const { items, unreadCount, markRead, markAllRead } = useNotifications(userId);
+  const { items, unreadCount, markRead, markAllRead, remove, clearRead } = useNotifications(userId);
 
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -122,6 +122,9 @@ export function NotificationBell() {
               {unreadCount > 0 && (
                 <button onClick={() => markAllRead()} className="text-[10px] text-muted hover:text-ink">mark all read</button>
               )}
+              {items.some(n => n.read_at) && (
+                <button onClick={() => clearRead()} className="text-[10px] text-muted hover:text-crit">clear read</button>
+              )}
               <Link href="/notifications" className="text-[10px] text-muted hover:text-ink" onClick={() => setOpen(false)}>history →</Link>
             </div>
           </div>
@@ -143,6 +146,7 @@ export function NotificationBell() {
                       router.push(notificationHref(n));
                       setTimeout(runScrollToHashComment, 50);
                     }}
+                    onRemove={() => remove(n.id)}
                   />
                 ))}
               </ul>
@@ -154,7 +158,7 @@ export function NotificationBell() {
   );
 }
 
-function NotificationRowItem({ n, onOpen }: { n: NotificationRow; onOpen: () => void }) {
+function NotificationRowItem({ n, onOpen, onRemove }: { n: NotificationRow; onOpen: () => void; onRemove: () => void }) {
   const href = notificationHref(n);
   const author = n.payload.author_name ?? "Someone";
   const verb = verbFor(n.kind);
@@ -162,7 +166,7 @@ function NotificationRowItem({ n, onOpen }: { n: NotificationRow; onOpen: () => 
   const subject = notificationSubject(n);
 
   return (
-    <li>
+    <li className="group relative">
       {/* Anchor for middle-click / new-tab affordance, but click is handled
           by onOpen which routes + kicks off the scroll retry — Next.js
           Link's default navigation skips firing the hashchange-based
@@ -191,6 +195,12 @@ function NotificationRowItem({ n, onOpen }: { n: NotificationRow; onOpen: () => 
           </div>
         </div>
       </a>
+      <button
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(); }}
+        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-muted2 hover:text-crit text-base leading-none w-5 h-5 flex items-center justify-center rounded transition-opacity"
+        title="remove"
+        aria-label="remove notification"
+      >×</button>
     </li>
   );
 }
