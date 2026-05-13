@@ -18,6 +18,7 @@ import { BoardView } from "@/components/BoardView";
 import { MatrixView } from "@/components/MatrixView";
 import { CommandPalette } from "@/components/CommandPalette";
 import { IssuesNavLink } from "@/components/IssuesNavLink";
+import { NotificationBell } from "@/components/NotificationBell";
 import { exportTasksCsv, exportTasksJson } from "@/lib/exporters";
 import { PipelineGuide } from "@/components/PipelineGuide";
 import { computeProgress } from "@/lib/progress";
@@ -265,6 +266,7 @@ export default function Page() {
               <span className="tabular">search</span>
               <kbd className="ml-1 text-[9px] tabular px-1 py-0.5 rounded border border-border bg-surface2">Ctrl K</kbd>
             </button>
+            <NotificationBell />
             <ThemeToggle />
             <button
               onClick={handleAdd}

@@ -5,6 +5,7 @@ import { useSession, useAllProfiles } from "@/lib/auth";
 import { LoginGate } from "@/components/LoginGate";
 import { AccessGate } from "@/components/AccessGate";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationBell } from "@/components/NotificationBell";
 import { IssuesPanel } from "@/components/IssuesPanel";
 import { isLive } from "@/lib/supabase";
 
@@ -39,6 +40,7 @@ export default function IssuesIndex() {
           </div>
           <div className="flex items-center gap-2">
             <Link href="/" className="text-[11px] eyebrow px-2.5 py-1.5 rounded-md border border-white/20 nav-muted hover:nav-ink hover:bg-white/5">← board</Link>
+            <NotificationBell />
             <ThemeToggle />
           </div>
         </div>
