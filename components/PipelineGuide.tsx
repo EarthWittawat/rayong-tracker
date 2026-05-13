@@ -126,11 +126,19 @@ export function PipelineGuide({ tasks }: { tasks: Task[] }) {
             href="https://github.com/EarthWittawat/rayong-tracker/blob/main/notebooks/pipeline.ipynb"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[11px] eyebrow inline-flex items-center gap-1 px-2.5 py-1 rounded border border-border text-muted hover:text-ink hover:bg-surface2 transition-colors"
-            title="Open the pipeline notebook"
+            className="group relative inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-md bg-ink text-bg shadow-card hover:shadow-cardHover hover:brightness-110 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent notebook-cta"
+            title="Open the pipeline notebook on GitHub"
           >
-            Notebook
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17l10-10M17 7H7v10" /></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+              <path d="M8 7h8M8 11h8M8 15h5" />
+            </svg>
+            <span className="tabular">Open notebook</span>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+              <path d="M7 17l10-10" />
+              <path d="M17 7H7v10" />
+            </svg>
           </a>
         </div>
       </div>

@@ -138,6 +138,16 @@ h1, h2, h3 { letter-spacing: -0.018em; }
 }
 .notify-badge-pulse { animation: notify-badge-pulse 1.8s ease-out infinite; }
 
+/* Subtle ambient pulse for the "Open notebook" CTA so it stands out in
+   the Pipeline-guide header without being shouty. Ring expands and fades
+   on a 3 s loop. */
+@keyframes notebook-cta {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(var(--c-accent) / 0.30); }
+  50%      { box-shadow: 0 0 0 8px rgb(var(--c-accent) / 0);   }
+}
+.notebook-cta { animation: notebook-cta 3s ease-in-out infinite; }
+.notebook-cta:hover { animation-play-state: paused; }
+
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none; margin: 0;
