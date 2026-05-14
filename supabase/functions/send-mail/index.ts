@@ -273,11 +273,22 @@ async function handleIssueComment(issueCommentId: string): Promise<Response> {
   const { data: author } = await admin.from("profiles").select("id, name").eq("id", c.author_id).single();
   const authorName = author?.name ?? "Someone";
 
-  // Recipients = mentions ∪ {assignee}. Author is dropped UNLESS they
-  // explicitly self-mentioned (intentional ping — keep it).
+  // Recipients = mentions ∪ {assignee} ∪ {everyone who has commented on this
+  // issue before}. The third group makes the issue thread behave like the
+  // task path (which uses task_subscribers) — without it, follow-up replies
+  // never reach earlier participants who weren't explicitly @-mentioned.
+  // Author is dropped UNLESS they explicitly self-mentioned.
   const mentionIds = new Set<string>((c.mentions ?? []) as string[]);
   const recipientIds = new Set<string>(mentionIds);
   if (issue.assignee_id) recipientIds.add(issue.assignee_id);
+  const { data: priorCommenters } = await admin
+    .from("issue_comments")
+    .select("author_id")
+    .eq("issue_id", c.issue_id)
+    .neq("id", c.id);
+  for (const row of priorCommenters ?? []) {
+    if (row?.author_id) recipientIds.add(row.author_id as string);
+  }
   if (!mentionIds.has(c.author_id)) {
     recipientIds.delete(c.author_id);
   }
