@@ -52,9 +52,17 @@ PRESET_RAYONG_CROPS_15: list[tuple[str, list[str]]] = [
     ("Jackfruit",   ["Jack fruit"]),
     ("Coconut",     ["Coconut"]),
     ("Longan",      ["Longan"]),
-    ("Rambutan",    ["Rambutan", "Rambutam"]),
+    ("Rambutan",    ["Rambutam", "Rambutan"]),  # Rambutam before Rambutan so the typo variant matches first
     ("Langsat",     ["Langsat"]),
-    ("Reservoir",   ["Reservoir"]),
+    # Reservoir rolls in every W-prefix water polygon -- mirrors the
+    # pipeline notebook's TAXONOMY:
+    #   W101 River, Canal · W102 Lake, Lagoon · W103 Ocean
+    #   W201 Reservoir    · W202 Farm pond     · W203 Irrigation canal
+    ("Reservoir",   [
+        "Reservoir", "River, Canal", "River", "Canal",
+        "Lake, Lagoon", "Lake", "Lagoon", "Ocean",
+        "Farm pond", "Irrigation canal",
+    ]),
 ]
 PRESETS: dict[str, list[tuple[str, list[str]]]] = {
     "rayong-crops-15": PRESET_RAYONG_CROPS_15,
@@ -306,7 +314,18 @@ def main() -> int:
                 print(f"  dropped {before - len(lu_ll)} mixed-class polygons (use --keep-mixed to override)")
 
     # Merge user-supplied label overrides on top of the built-in LDD dict.
+    # Also pin clean labels for preset target classes that aggregate multiple
+    # LDD codes (e.g. Reservoir = W101/W102/W103/W201/W202/W203). Without
+    # these, the auto-derived label falls back to the mode of LU_DES_EN
+    # inside each preset group, which gives ugly results like "Farm pond"
+    # for the unified water class.
     labels = dict(LABELS)
+    labels.update({
+        "Rice":        "Active paddy field",
+        "Reservoir":   "Water bodies",
+        "Langsat":     "Langsat, Longkong",
+        "Jackfruit":   "Jack fruit",
+    })
     if args.labels is not None:
         labels.update(json.loads(Path(args.labels).read_text(encoding="utf-8")))
 
