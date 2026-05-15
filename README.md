@@ -6,11 +6,11 @@ The web app is the *operations side* of the project. The Jupyter notebook in `no
 
 | Stage  | What it does                                                                 |
 | ------ | ---------------------------------------------------------------------------- |
-| Data   | CDSE OpenEO · Sentinel-2 L2A monthly medians with SCL cloud masking          |
-| SR     | OpenSR latent-diffusion super-resolution, 10 m → 2.5 m on B02/B03/B04/B08    |
-| GenAI  | Latent-LoRA fine-tuning of opensr-ldsrs2 per minority class (4-band)         |
-| Feat   | LDD landuse rasterised on the SR grid, temporal stats + indices + GLCM/LBP   |
-| RF     | Per-pixel Random Forest cascade (stage-1 + minority-focused stage-2)         |
+| Data   | CDSE openEO · Sentinel-2 L2A monthly medians with SCL cloud masking          |
+| SR     | OpenSR latent-diffusion 4× super-resolution, 10 m → 2.5 m on B02/B03/B04/B08, per-quadrant cache |
+| GenAI  | Latent-LoRA fine-tune of opensr-ldsrs2 per minority class (7 classes), 512-px windows pooled across 4 quadrants |
+| Feat   | LDD landuse rasterised on the SR grid, slim 12-feature table (NDVI / NDWI / EVI + band stats), per-class pixel cap |
+| RF     | Per-pixel Random Forest cascade (stage-1 + minority-focused stage-2), DF + synth_rows resume-cacheable |
 
 ---
 
@@ -84,15 +84,15 @@ Self-removal is blocked at the UI layer (the "remove member" control turns into 
 
 ## Pipeline overview
 
-The five stages mirror notebook sections one-for-one. See **PipelineGuide** in the app for the full prose breakdown.
+Five stages mirror notebook sections one-for-one. See **PipelineGuide** in the app for the full prose breakdown.
 
-1. **Data** · CDSE openEO pulls Sentinel-2 L2A scenes for the AOI, masks SCL classes 3 / 8 / 9 / 10 (cloud-shadow, mid + high cloud, cirrus), and aggregates a monthly median per band. Output: one GeoTIFF per month under `cache/s2_monthly/<aoi>/`.
-2. **SR** · `opensr_model.SRLatentDiffusion` upsamples 10 m → 2.5 m on the 4-band RGB-NIR composite. 20 m bands are bilinearly upsampled afterwards (the SR model is not trained on them). Outputs: 4× super-resolved GeoTIFFs in `cache/s2_sr/<aoi>/`.
-3. **GenAI** · Latent-space LoRA adapters fine-tune the opensr-ldsrs2 UNet per minority class on real SR patches. Training runs in the model's native latent space (VAE encode → DDPM noise → predict ε), so synthetic outputs are 4-band Sentinel-2 reflectance, not RGB. Per-class adapter is ~10 MB; ~200 synthetic patches are appended to the pixel table for §RF.
-4. **Feat** · LDD landuse shapefile is rasterised onto the SR grid; per-pixel features = monthly band statistics + NDVI / NDWI / EVI + GLCM / LBP texture in a small window. Written to `pixel_table.parquet`.
-5. **RF** · `sklearn.RandomForestClassifier` stage-1 + a minority-focused stage-2 cascade. Stage-2 catches pixels where stage-1 confidence < 0.6 or where stage-1 predicts a dominant class but the feature vector is close to a minority centroid.
+1. **Data** · CDSE openEO pulls Sentinel-2 L2A scenes for the AOI, masks SCL classes 3 / 8 / 9 / 10 (cloud-shadow, mid + high cloud, cirrus), and aggregates a monthly median per band. Outputs one GeoTIFF per month under `data/_cache/s2_monthly/rayong_<quadrant>/`. Rayong is split at the centroid into NW / NE / SW / SE quadrants; the `§5 driver` cell iterates all four to cover the whole province without ever holding everything in RAM at once.
+2. **SR** · `opensr_model.SRLatentDiffusion` 4× super-resolves 10 m → 2.5 m on the 4-band RGB-NIR composite, 128-LR → 512-SR tiles with 32-px overlap. Per-quadrant cache lives at `data/_cache/s2_sr/rayong_<quadrant>/sr_YYYYMM.tif`; cached tifs are reused as-is so re-runs are near-instant. A standalone `notebooks/regen_quadrant.ipynb` rebuilds a single quadrant's S2 + SR when one cache is dirty (duplicate / truncated / wrong bbox).
+3. **GenAI** · Latent-space LoRA adapters (rank 32, α 64) fine-tune the opensr-ldsrs2 UNet per minority class on real SR patches. Training runs in the model's native latent space (VAE encode → DDPM noise → predict ε), so synthetic outputs are 4-band Sentinel-2 reflectance, not RGB. Seven minority classes (Mango / Rambutan / Langsat / Longan / Mangosteen / Coconut / Jackfruit) — windows pooled across all 4 quadrants up to `samples_per_minor = 600` per class, mask-weighted MSE focuses the adapter on class pixels. Sampler: DDIM `η = 0.1`, 200 steps. Inline RGB + NDVI snapshots every 10 epochs let you eyeball convergence. Per-class adapter ≈ 10 MB; 200 synthetic patches per class are appended to the pixel table for §RF and cached to `data/_cache/synth_rows.pkl` so a kernel restart can skip §6.
+4. **Feat** · LDD landuse shapefile rasterised onto the SR grid; per-pixel features are the slim 12-column SR-only set (4 bands × {mean, std}, NDVI mean / amp, NDWI mean, EVI mean). Per-class pixel cap (default 100 000 per AOI) keeps dominant classes (Para rubber, Oil palm) from swamping the table. Output cached at `data/_out/pixel_table_full.parquet` so the RF step can lazy-reload after a kernel restart.
+5. **RF** · `sklearn.RandomForestClassifier` stage-1 on the full table + a minority-focused stage-2 cascade. Cell auto-reloads cached `DF` and `synth_rows` from disk when not in globals and splices synth rows into `DF` before fitting. Stage-2 catches samples flagged as minority.
 
-§10 of the notebook exports `public/class-stats.json` (per-quadrant + per-S2-tile class shares + imbalance metrics). Commit the JSON to refresh the ClassInsights panel on the live site.
+§10 of the notebook exports `public/class-stats.json` (per-quadrant + per-S2-tile class shares + imbalance metrics) via the `notebooks/export_class_stats.py` standalone (preset `rayong-crops-15` mapping LU_DES_EN → 15-class taxonomy including a unified water class). Commit the JSON to refresh the ClassInsights panel on the live site.
 
 ---
 
