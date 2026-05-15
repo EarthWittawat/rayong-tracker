@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createIssue, DEFAULT_LABELS, useIssueIndex } from "@/lib/issues";
 import { MentionInput } from "./MentionInput";
 import { LabelChip } from "./LabelChip";
+import { AssigneePicker } from "./AssigneePicker";
 import type { Profile } from "@/lib/auth";
 
 export function NewIssueModal({
@@ -19,12 +20,12 @@ export function NewIssueModal({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
-  const [assigneeId, setAssigneeId] = useState<string | "">("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function reset() {
-    setTitle(""); setBody(""); setLabels([]); setAssigneeId(""); setError(null);
+    setTitle(""); setBody(""); setLabels([]); setAssigneeIds([]); setError(null);
   }
 
   function toggleLabel(name: string) {
@@ -41,7 +42,7 @@ export function NewIssueModal({
         title: t,
         body: body.trim(),
         labels,
-        assignee_id: assigneeId || null,
+        assignee_ids: assigneeIds,
         profile,
       });
       if (!issue) throw new Error("Could not create issue.");
@@ -120,20 +121,13 @@ export function NewIssueModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] eyebrow text-muted2 block mb-1.5">Assignee (optional)</label>
-              <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full text-sm bg-surface2 border border-border rounded-md px-3 py-2 text-ink outline-none focus:border-accent"
-              >
-                <option value="">— unassigned —</option>
-                {profiles.map(p => (
-                  <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="text-[10px] eyebrow text-muted2 block mb-1.5">Assignees</label>
+            <AssigneePicker
+              profiles={profiles}
+              selected={assigneeIds}
+              onChange={setAssigneeIds}
+            />
           </div>
 
           {error && <p className="text-xs text-crit">{error}</p>}

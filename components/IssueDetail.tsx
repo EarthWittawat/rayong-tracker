@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   useIssueByNumber, useIssueComments, useIssueIndex,
-  setIssueStatus, updateIssue, deleteIssue,
+  setIssueStatus, updateIssue, setIssueAssignees, deleteIssue,
   DEFAULT_LABELS, type IssueComment,
 } from "@/lib/issues";
 import { LabelChip } from "./LabelChip";
 import { MentionInput } from "./MentionInput";
+import { AssigneePicker } from "./AssigneePicker";
 import { parseMentions, renderRichHTML } from "@/lib/mentions";
 import { formatRelative } from "@/lib/relativeTime";
 import { scrollToHashComment } from "@/lib/notifications";
@@ -64,10 +65,10 @@ export function IssueDetail({
     );
   }
 
-  const author   = profileById[issue.author_id];
-  const assignee = issue.assignee_id ? profileById[issue.assignee_id] : null;
-  const isAuthor = profile.id === issue.author_id;
-  const isOpen   = issue.status === "open";
+  const author    = profileById[issue.author_id];
+  const assignees = issue.assignee_ids.map(id => profileById[id]).filter(Boolean) as Profile[];
+  const isAuthor  = profile.id === issue.author_id;
+  const isOpen    = issue.status === "open";
 
   async function toggleStatus() {
     if (!issue) return;
@@ -115,9 +116,9 @@ export function IssueDetail({
     await updateIssue(issue.id, { labels: next });
   }
 
-  async function setAssignee(id: string) {
+  async function setAssignees(ids: string[]) {
     if (!issue) return;
-    await updateIssue(issue.id, { assignee_id: id || null });
+    await setIssueAssignees(issue.id, ids);
   }
 
   async function handleDelete() {
@@ -300,21 +301,18 @@ export function IssueDetail({
           </div>
 
           <div className="rounded-xl2 border border-border bg-surface p-4 space-y-2">
-            <div className="text-[10px] eyebrow text-muted2">Assignee</div>
-            <select
-              value={issue.assignee_id ?? ""}
-              onChange={(e) => setAssignee(e.target.value)}
-              className="w-full text-sm bg-surface2 border border-border rounded-md px-2 py-1.5 text-ink outline-none focus:border-accent"
-            >
-              <option value="">— unassigned —</option>
-              {profiles.map(p => (
-                <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>
-              ))}
-            </select>
-            {assignee && (
+            <div className="text-[10px] eyebrow text-muted2">Assignees</div>
+            <AssigneePicker
+              profiles={profiles}
+              selected={issue.assignee_ids}
+              onChange={setAssignees}
+            />
+            {assignees.length > 0 ? (
               <div className="text-[11px] text-muted2">
-                Working on this · <span className="text-ink/80">{assignee.emoji} {assignee.name}</span>
+                Working on this · {assignees.map(a => `${a.emoji} ${a.name}`).join(" · ")}
               </div>
+            ) : (
+              <div className="text-[11px] text-muted2">Visible to everyone</div>
             )}
           </div>
         </aside>

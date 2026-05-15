@@ -15,12 +15,28 @@ export type Issue = {
   status: IssueStatus;
   labels: string[];
   author_id: string;
-  assignee_id: string | null;
+  // Multi-assignee. Empty array = team-wide (no specific owner). Populated
+  // client-side by joining issue_assignees -- not a column on issues.
+  assignee_ids: string[];
   closed_at: string | null;
   closed_by: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export type IssueRow = Omit<Issue, "assignee_ids">;
+
+type IssueWithAssignees = IssueRow & {
+  issue_assignees?: { assignee_id: string }[] | null;
+};
+
+function flattenIssue(row: IssueWithAssignees): Issue {
+  const { issue_assignees, ...rest } = row;
+  return {
+    ...(rest as IssueRow),
+    assignee_ids: (issue_assignees ?? []).map(a => a.assignee_id),
+  };
+}
 
 export type IssueComment = {
   id: string;
@@ -66,33 +82,26 @@ export function useIssueList(filter: IssueStatus | "all" = "open") {
     const sb = getSupabase();
     if (!sb) { setLoading(false); return; }
     let alive = true;
-    (async () => {
-      setLoading(true);
-      const q = sb.from("issues").select("*").order("number", { ascending: false });
+    async function refresh() {
+      const q = sb!
+        .from("issues")
+        .select("*, issue_assignees ( assignee_id )")
+        .order("number", { ascending: false });
       const { data } = filter === "all" ? await q : await q.eq("status", filter);
       if (!alive) return;
-      setItems((data as Issue[]) ?? []);
+      setItems(((data as IssueWithAssignees[]) ?? []).map(flattenIssue));
       setLoading(false);
-    })();
-    const ch = sb.channel(`issues-list-${Math.random().toString(36).slice(2, 8)}`)
+    }
+    setLoading(true);
+    refresh();
+    const idSuffix = Math.random().toString(36).slice(2, 8);
+    const ch = sb
+      .channel(`issues-list-${idSuffix}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "issues" },
-        (payload) => {
-          if (payload.eventType === "DELETE") {
-            const oldId = (payload.old as Issue).id;
-            setItems(prev => prev.filter(i => i.id !== oldId));
-          } else {
-            const row = payload.new as Issue;
-            setItems(prev => {
-              const matchesFilter = filter === "all" || row.status === filter;
-              const idx = prev.findIndex(i => i.id === row.id);
-              if (idx === -1) return matchesFilter ? [row, ...prev] : prev;
-              if (!matchesFilter) return prev.filter(i => i.id !== row.id);
-              const copy = prev.slice();
-              copy[idx] = row;
-              return copy;
-            });
-          }
-        }).subscribe();
+        () => { refresh(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "issue_assignees" },
+        () => { refresh(); })
+      .subscribe();
     return () => { alive = false; sb.removeChannel(ch); };
   }, [filter]);
 
@@ -125,7 +134,7 @@ export async function createIssue(input: {
   title: string;
   body: string;
   labels: string[];
-  assignee_id: string | null;
+  assignee_ids: string[];
   profile: Profile;
 }): Promise<Issue | null> {
   const sb = getSupabase();
@@ -134,17 +143,47 @@ export async function createIssue(input: {
     title: input.title.trim(),
     body: input.body,
     labels: input.labels,
-    assignee_id: input.assignee_id,
     author_id: input.profile.id,
   }).select("*").single();
   if (error) { console.warn("createIssue failed:", error.message); return null; }
-  return data as Issue;
+  const issueRow = data as IssueRow;
+  if (input.assignee_ids.length > 0) {
+    const rows = input.assignee_ids.map(aid => ({ issue_id: issueRow.id, assignee_id: aid }));
+    const { error: aerr } = await sb.from("issue_assignees").insert(rows);
+    if (aerr) console.warn("createIssue: assignee insert failed:", aerr.message);
+  }
+  return { ...issueRow, assignee_ids: input.assignee_ids };
 }
 
-export async function updateIssue(id: string, patch: Partial<Pick<Issue, "title" | "body" | "labels" | "assignee_id">>) {
+export async function updateIssue(id: string, patch: Partial<Pick<Issue, "title" | "body" | "labels">>) {
   const sb = getSupabase();
   if (!sb) return;
   await sb.from("issues").update(patch).eq("id", id);
+}
+
+export async function setIssueAssignees(issueId: string, assigneeIds: string[]) {
+  const sb = getSupabase();
+  if (!sb) return;
+  const desired = new Set(assigneeIds);
+  const { data: current } = await sb
+    .from("issue_assignees")
+    .select("assignee_id")
+    .eq("issue_id", issueId);
+  const have = new Set(((current as { assignee_id: string }[]) ?? []).map(r => r.assignee_id));
+  const toAdd = [...desired].filter(id => !have.has(id));
+  const toRemove = [...have].filter(id => !desired.has(id));
+  if (toAdd.length > 0) {
+    await sb.from("issue_assignees").insert(
+      toAdd.map(aid => ({ issue_id: issueId, assignee_id: aid })),
+    );
+  }
+  if (toRemove.length > 0) {
+    await sb
+      .from("issue_assignees")
+      .delete()
+      .eq("issue_id", issueId)
+      .in("assignee_id", toRemove);
+  }
 }
 
 export async function setIssueStatus(id: string, status: IssueStatus, profile: Profile) {
@@ -173,20 +212,37 @@ export function useIssueByNumber(number: number | null) {
     if (number == null) { setIssue(null); setLoading(false); return; }
     const sb = getSupabase();
     if (!sb) { setLoading(false); return; }
+    const num = number;
     let alive = true;
-    (async () => {
-      setLoading(true);
-      const { data } = await sb.from("issues").select("*").eq("number", number).maybeSingle();
+    let cachedId: string | null = null;
+
+    async function refresh() {
+      const { data } = await sb!
+        .from("issues")
+        .select("*, issue_assignees ( assignee_id )")
+        .eq("number", num)
+        .maybeSingle();
       if (!alive) return;
-      setIssue((data as Issue) ?? null);
+      const flat = data ? flattenIssue(data as IssueWithAssignees) : null;
+      cachedId = flat?.id ?? null;
+      setIssue(flat);
       setLoading(false);
-    })();
+    }
+    setLoading(true);
+    refresh();
+
     const ch = sb.channel(`issue-${number}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "issues", filter: `number=eq.${number}` },
         (payload) => {
-          if (payload.eventType === "DELETE") setIssue(null);
-          else setIssue(payload.new as Issue);
-        }).subscribe();
+          if (payload.eventType === "DELETE") { setIssue(null); cachedId = null; }
+          else refresh();
+        })
+      .on("postgres_changes", { event: "*", schema: "public", table: "issue_assignees" },
+        (payload) => {
+          const row = (payload.new ?? payload.old) as { issue_id?: string } | null;
+          if (row?.issue_id && row.issue_id === cachedId) refresh();
+        })
+      .subscribe();
     return () => { alive = false; sb.removeChannel(ch); };
   }, [number]);
 

@@ -126,7 +126,9 @@ export function IssuesPanel({ profile, profiles }: { profile: Profile; profiles:
               key={i.id}
               issue={i}
               author={profileById[i.author_id]}
-              assignee={i.assignee_id ? profileById[i.assignee_id] : undefined}
+              assignees={i.assignee_ids
+                .map(id => profileById[id])
+                .filter(Boolean) as Profile[]}
             />
           ))}
         </div>
@@ -143,7 +145,7 @@ export function IssuesPanel({ profile, profiles }: { profile: Profile; profiles:
   );
 }
 
-function IssueRow({ issue, author, assignee }: { issue: Issue; author?: Profile; assignee?: Profile }) {
+function IssueRow({ issue, author, assignees }: { issue: Issue; author?: Profile; assignees: Profile[] }) {
   const cc = useIssueCommentCount(issue.id);
   return (
     <Link
@@ -179,13 +181,29 @@ function IssueRow({ issue, author, assignee }: { issue: Issue; author?: Profile;
               </div>
             </div>
             <div className="flex items-center gap-2 text-[11px] tabular text-muted2 shrink-0">
-              {assignee && (
+              {assignees.length === 0 ? (
                 <span
-                  title={`assigned to ${assignee.name}`}
-                  className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs"
-                  style={{ background: `${assignee.color}1F`, color: assignee.color, border: `1px solid ${assignee.color}55` }}
-                >
-                  {assignee.emoji}
+                  title="visible to everyone"
+                  className="inline-flex items-center justify-center px-1.5 h-6 rounded-full text-[10px] bg-info/15 text-info border border-info/40"
+                >Everyone</span>
+              ) : (
+                <span className="inline-flex -space-x-1.5">
+                  {assignees.slice(0, 3).map(a => (
+                    <span
+                      key={a.id}
+                      title={`assigned to ${a.name}`}
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ring-1 ring-surface"
+                      style={{ background: `${a.color}1F`, color: a.color, border: `1px solid ${a.color}55` }}
+                    >
+                      {a.emoji}
+                    </span>
+                  ))}
+                  {assignees.length > 3 && (
+                    <span
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] bg-surface2 text-muted2 ring-1 ring-surface border border-border"
+                      title={`+${assignees.length - 3} more`}
+                    >+{assignees.length - 3}</span>
+                  )}
                 </span>
               )}
               {cc > 0 && (
