@@ -1,134 +1,170 @@
 # Rayong Crop Tracker
 
-Real-time collaboration board for a five-person Earth Observation team building a Sentinel-2 → super-resolution → generative augmentation → feature engineering → Random Forest crop-classification pipeline over Rayong province, Thailand.
+Earth-observation research project on minority-crop mapping in Rayong province, Thailand. The central research question is whether **single-image super-resolution of Sentinel-2 imagery enables unsupervised spectral unmixing of the mixed-class polygons in the LDD (Land Development Department) cadastral landuse layer**, recovering pure per-component pixel labels that can be folded back into a downstream Random Forest classifier.
 
-The web app is the *operations side* of the project. The Jupyter notebook in `notebooks/pipeline.ipynb` is the *engineering side*. Both share the same five-stage taxonomy:
-
-| Stage  | What it does                                                                 |
-| ------ | ---------------------------------------------------------------------------- |
-| Data   | CDSE openEO · Sentinel-2 L2A monthly medians with SCL cloud masking          |
-| SR     | OpenSR latent-diffusion 4× super-resolution, 10 m → 2.5 m on B02/B03/B04/B08, per-quadrant cache |
-| GenAI  | Latent-LoRA fine-tune of opensr-ldsrs2 per minority class (7 classes), 512-px windows pooled across 4 quadrants |
-| Feat   | LDD landuse rasterised on the SR grid, slim 12-feature table (NDVI / NDWI / EVI + band stats), per-class pixel cap |
-| RF     | Per-pixel Random Forest cascade (stage-1 + minority-focused stage-2), DF + synth_rows resume-cacheable |
+The primary deliverable is the Jupyter notebook `notebooks/cluster_minority.ipynb`, which carries the end-to-end clustering experiment. A companion Next.js web application is included for team coordination and is documented at the end of this file.
 
 ---
 
-## Highlights
+## Research goal
 
-- **Kanban board** with one column per pipeline stage and one card per (member, stage) task. Cards expand inline for `+ / −`, quick-pick increments, status pills, comment counts, and subtasks.
-- **List view** with the full member card editor: comments thread, file attachments, per-stage notes.
-- **Presence + activity feed** over Supabase Realtime — teammate avatars, "X editing" chips, rolling 30-event broadcast feed.
-- **Satellite map** (Leaflet + Esri World Imagery) with draw-rectangle → GeoJSON / Python bbox export, click-to-read lat/lng + MGRS, optional Sentinel-2 100 km MGRS tile overlay.
-- **Class-distribution insights** — reads `public/class-stats.json` (produced by `notebooks/export_class_stats.py` or §10 of the notebook) and renders per-quadrant + per-S2-tile class shares, Shannon entropy, Gini, and minority-class flags.
-- **Pipeline guide** — in-app stepper that documents every stage: what / why / done / inputs / outputs / tools.
-- **Team telemetry footer** — 24 h + 7 d edit counts, completion %, top contributor, lagging stage.
-- **Subtasks** — per-task checklists; anyone can tick, only the author can delete.
-- **Comments + @mentions + Supabase Storage attachments** with email fan-out via Resend and a daily-digest Vercel Cron.
-- **Light + dark themes** with a CSS-variable palette and a force-dark navigation slab.
-- **Issues** — in-app issue tracker at `/issues`. Anyone signed in can open issues, label them, assign teammates, comment with `@mentions` + `#123` cross-links, and close / reopen. Backed by `issues` + `issue_comments` tables on Supabase with realtime sync.
+**Hypothesis.** Sentinel-2 at native 10 m resolution cannot resolve the component crops in mixed-class agricultural parcels: a 10 m pixel inside an LDD polygon labelled `A403/A419` (Durian + Mangosteen) is a sub-pixel spectral mixture of the two crops. Super-resolving the same parcel to 2.5 m breaks the sub-pixel mixture into pixels that are more likely to be component-pure, so unsupervised clustering on the super-resolved pixels of a mixed parcel should split them into two sub-clusters that match the parcel's listed components.
+
+**Test.** For every minority-only mixed `LU_CODE = A/B` in the AOI, fit `K = 2` KMeans on the pool `(pure A + pure B + mixed A/B)` independently at the 10 m grid and at the 2.5 m super-resolved grid. Compare the per-pair purity (how often KMeans recovers the pure-component label) and mixed-pixel split ratio between the two grids. A positive `SR - LR` delta on the balanced purity is direct evidence that super-resolution carries spectrally meaningful detail at the sub-10 m scale.
+
+**Operational outcome.** The minority-class roster (Durian, Rambutan, Coconut, Mango, Longan, Jackfruit, Mangosteen, Langsat) has roughly 7 700 pure-component polygons and 1 100 mixed-component polygons across Rayong. Confirmed sub-polygon decomposition turns the mixed pool into additional per-pixel training data for the minority classifier without relying on generative synthesis.
+
+```
+Sentinel-2 L2A (CDSE openEO)
+   │
+   ├── 10 m monthly medians  ─────────┐
+   │                                  │
+   └── 4× super-resolution (OpenSR    │
+       latent diffusion) → 2.5 m  ────┤
+                                      │
+                                      ▼
+                       per-pixel feature engineering
+                        (12-D: 4 bands × {mean, std},
+                         NDVI / NDWI / EVI summaries)
+                                      │
+                                      ▼
+                   per-pair K=2 KMeans on
+                   (pure A + pure B + mixed A/B)
+                   independently at LR and SR
+                                      │
+                                      ▼
+              purity + split-ratio comparison
+              + UMAP visualisation per pair
+                                      │
+                                      ▼
+              decomposed mixed-pixel pool
+              ─► minority RF training data
+```
 
 ---
 
-## Stack
+## Notebook walkthrough — `notebooks/cluster_minority.ipynb`
 
-| Layer       | Choice                                                                  |
-| ----------- | ----------------------------------------------------------------------- |
-| Frontend    | Next.js 14 App Router · React 18 · TypeScript · Tailwind 3              |
-| Map         | Leaflet · leaflet-draw · `mgrs` for tile / coord conversion             |
-| Backend     | Supabase (Postgres 15 + Realtime + Auth + Storage + Edge Functions)     |
-| Email       | Resend (free tier, 3 000 mail/month)                                    |
-| Hosting     | Vercel (Hobby) + Vercel Cron for the daily digest                       |
-| Auth        | Google OAuth via Supabase                                               |
-| Notebook    | Conda env (`notebooks/environment.yml`) · Python 3.12 · PyTorch CUDA    |
+The notebook is self-contained: it pulls the 10 m raster, loads the cached super-resolved stack, runs the clustering experiment, and persists the decomposed mixed-pixel pool. The four quadrants (NW / NE / SW / SE) are processed in a single driver loop.
+
+| § | Section | What it does |
+| --- | --- | --- |
+| 1 | Shapefile · mixed-component catalogue | Inspects the LDD shapefile; lists every minority-only `LU_CODE`, pure and mixed, with pixel counts. |
+| 2 | Sentinel-2 rasters · LR (10 m) and SR (2.5 m) | Fetches L2A monthly medians via CDSE openEO for any quadrant missing local cache (cloud-masked using SCL classes 3 / 8 / 9 / 10), then exposes loader functions for both grids. |
+| 3 | Per-pixel features | Stride-samples each grid per quadrant, computes the 12-D feature schema across the three-month window, concatenates into `PIX_LR` and `PIX_SR` with `quadrant` and `grid` columns. |
+| 4 | KMeans on pure-minority pixels · LR vs SR | Baseline `K = 8` KMeans on the pure pool. Reports ARI and NMI for LR and SR side-by-side; prints the cluster × class contingency. |
+| 4.1 | Pairwise Fisher separability | Pairwise Fisher distance between pure-class centroids, plotted as a heatmap for LR and SR with the `SR - LR` delta tabulated. |
+| 5 | UMAP · pure-minority embedding | 2-D UMAP of the standardised feature space, LR and SR side-by-side, coloured by true class. |
+| 5.1 | Vegetation-index distributions | Violin plots of `NDVI_mean`, `NDVI_amp`, `NDWI_mean`, `EVI_mean` per pure class, LR and SR. |
+| 6 | Mixed-polygon decomposition (centroid baseline) | For every mixed `LU_CODE`, the closest pure-class centroid per pixel; used as a sanity baseline for the SR feature space. |
+| 6.1 | Mixed-code → pure-centroid distance | Heatmap of mean Euclidean distance from every mixed-code pixel cloud to each pure centroid; asterisks mark listed components. |
+| 6.2 | **Per-pair K=2 KMeans · LR vs SR** | The headline experiment. Per pair: K=2 KMeans on (pure A + pure B + mixed A/B), independently at LR and SR. Reports `LR_balanced_purity`, `SR_balanced_purity`, `delta_SR_minus_LR`, and the mixed-pixel split. |
+| 6.3 | Per-pair UMAP · LR vs SR | Per-pair UMAP grid; points coloured by KMeans cluster and shaped by origin (pure A / pure B / mixed A/B). |
+| 6.4 | Gaussian-mixture soft posterior | 2-component GMM initialised at the pure centroids; reports per-pixel `P(A)` and `P(B)` on a chosen mixed pair (for downstream weighted training). |
+| 6.5 | Spatial render | Picks the largest target-pair polygon across the four quadrants, renders the SR per-pixel KMeans assignment back on its bounding box. Spatial coherence diagnostic. |
+| 7 | Export decomposed mixed pixels | Persists every eligible mixed pixel with its inferred component, the originating pair, and the quadrant tag to `data/_out/cluster_minority/rayong_<aoi-tag>_mixed_kmeans.parquet`. |
+
+### Outputs
+
+| Path | Contents |
+| --- | --- |
+| `data/_cache/s2_monthly/rayong_<q>/openEO_YYYY-MM-01Z.tif` | Cloud-masked 10 m monthly medians per quadrant; written by §2 if missing. |
+| `data/_cache/s2_sr/rayong_<q>/sr_YYYYMM.tif` | Pre-computed 2.5 m super-resolved stacks per quadrant; read by §2. |
+| `data/_out/cluster_minority/rayong_<aoi-tag>_mixed_kmeans.parquet` | Per-pixel KMeans-decomposed mixed pool, ready for the RF stage. |
+
+### Tunable parameters
+
+The §2 configuration cell exposes:
+
+| Parameter | Default | Purpose |
+| --- | --- | --- |
+| `QUADRANTS` | `["nw", "ne", "sw", "se"]` | AOIs included in the combined pixel table. |
+| `LR_MONTHS` | `["2024-10", "2024-11", "2024-12"]` | Three-month window for the feature schema. |
+| `STRIDE_SR` | `2` | SR-grid sub-sampling stride. |
+| `STRIDE_LR` | `1` | LR-grid stride (LR is already 16× sparser than SR, so no extra stride). |
+| `MAX_PIX_PER_CLASS` | `1_000_000` | Per-`(quadrant, LU_CODE)` pixel cap. |
+| `MIN_PURE_PER_COMP` | `200` | Minimum pure-component pixels for a pair to be admitted to §6.2. |
+| `MIN_MIXED_PIXELS` | `100` | Minimum mixed pixels for a pair to be admitted to §6.2. |
+| `PAIR_PURE_CAP` | `10_000` | Per-component pixel cap inside the per-pair KMeans pool. |
+
+---
+
+## Quickstart
+
+```bash
+# clone + create the notebook environment
+git clone <repository-url> rayong-tracker
+cd rayong-tracker
+conda env create -f notebooks/environment.yml
+conda activate synthcrop
+python -m ipykernel install --user --name synthcrop --display-name "Python (synthcrop)"
+```
+
+The notebook authenticates to CDSE openEO on first run; you will be prompted to complete an OIDC device-code flow in your browser. A Copernicus Data Space Ecosystem account is required.
+
+Cached super-resolved tiles for the four quadrants live under `data/_cache/s2_sr/rayong_<q>/`. If you do not have those, run `notebooks/pipeline.ipynb` (the full SR pipeline) for each quadrant first, or run the super-resolution stage of the companion app's documentation.
+
+Pinned versions: Python 3.12 (opensr-model requirement), `numpy<2`, `torch==2.3.1+cu121`, `transformers<4.47`.
 
 ---
 
 ## Repository layout
 
 ```
-app/         Next.js App Router pages, layout, cron route, global CSS.
-components/  React components: BoardView, MemberCard, MapClient,
-             ClassInsights, PipelineGuide, SubtasksList, etc.
-lib/         Hooks + Supabase client + utilities (useStore, auth,
-             comments, subtasks, classStats, relativeTime, rayong).
-supabase/    schema.sql · migrations · Edge Function (send-mail).
-notebooks/   pipeline.ipynb · environment.yml · _build_notebook.py.
-public/      Static assets (leaflet-draw sprite, class-stats.json).
-vercel.json  Cron schedule for the digest mailer.
+notebooks/
+  cluster_minority.ipynb     Main clustering experiment (LR vs SR, K=2 per pair).
+  pipeline.ipynb             End-to-end ingest → SR → features → RF (companion).
+  regen_quadrant.ipynb       Standalone rebuild of one quadrant's S2 + SR cache.
+  environment.yml            Pinned conda environment.
+
+data/
+  landuse_ryg/               LDD shapefile (LU_RYG_2567.*).
+  _cache/s2_monthly/         openEO 10 m monthly medians per quadrant.
+  _cache/s2_sr/              Super-resolved 2.5 m stacks per quadrant.
+  _out/cluster_minority/     Decomposed mixed-pixel parquet outputs.
+
+app/ components/ lib/ supabase/ public/
+  Companion Next.js application (see below).
 ```
 
 ---
 
-## Data model
+## Companion web application
 
-```
-members        : one row per teammate (auto-created on first sign-in)
-tasks          : one row per (member, stage); done / total / note
-profiles       : one row per Google account (display, color, emoji, prefs)
-subtasks       : user-authored checklist items under each task
-comments       : threaded discussion per task, with @mentions
-attachments    : files attached to comments (Supabase Storage)
-issues         : in-app issue tracker (number, title, body, labels, status)
-issue_comments : threaded discussion per issue, with @mentions
-task_subscribers, notifications  : digest mailer plumbing
-```
+A Next.js / TypeScript / Tailwind application backed by Supabase tracks the five-person team's pipeline progress. It is operational tooling, not part of the research workflow:
 
-Edits are **optimistic** locally (UI updates immediately) and **debounced** at 220 ms before hitting Postgres. All tables above (except the mailer plumbing) are on the `supabase_realtime` publication, so every browser sees every change over a single WebSocket.
+- Kanban board with one column per pipeline stage (Data / SR / GenAI / Feat / RF) and one card per (member, stage).
+- Satellite map (Leaflet + Esri World Imagery) with rectangle-draw → GeoJSON / Python bbox export and an optional Sentinel-2 100 km MGRS tile overlay.
+- Class-distribution panel reading `public/class-stats.json`, with per-quadrant and per-S2-tile class shares plus imbalance metrics.
+- In-app issue tracker with labels, assignees, and threaded `@mention` comments.
 
-Tables filtered by a non-primary-key column on the client (`comments.task_id`, `attachments.comment_id`, `subtasks.task_id`, `issue_comments.issue_id`, `issues.status` / `issues.number`) need `REPLICA IDENTITY FULL` so `UPDATE` / `DELETE` events carry the filtered column. Otherwise the filter on the subscriber side can't match and the event is silently dropped — UI shows stale state until refresh. Apply `supabase/migrations/20260513140000_realtime_full_identity.sql` once to enable.
+### Stack
 
-Self-removal is blocked at the UI layer (the "remove member" control turns into a small "you" lock chip on your own row) and in the handler (defensive early return), so the signed-in user's row can never be dropped accidentally.
+| Layer       | Choice                                                                  |
+| ----------- | ----------------------------------------------------------------------- |
+| Frontend    | Next.js 14 App Router · React 18 · TypeScript · Tailwind 3              |
+| Map         | Leaflet · leaflet-draw · `mgrs` for tile / coord conversion             |
+| Backend     | Supabase (Postgres 15 + Auth + Storage + Edge Functions)                |
+| Email       | Resend (free tier)                                                      |
+| Hosting     | Vercel (Hobby) + Vercel Cron for the daily digest                       |
+| Auth        | Google OAuth via Supabase                                               |
+| Notebook    | Conda env (`notebooks/environment.yml`) · Python 3.12 · PyTorch CUDA    |
 
----
-
-## Pipeline overview
-
-Five stages mirror notebook sections one-for-one. See **PipelineGuide** in the app for the full prose breakdown.
-
-1. **Data** · CDSE openEO pulls Sentinel-2 L2A scenes for the AOI, masks SCL classes 3 / 8 / 9 / 10 (cloud-shadow, mid + high cloud, cirrus), and aggregates a monthly median per band. Outputs one GeoTIFF per month under `data/_cache/s2_monthly/rayong_<quadrant>/`. Rayong is split at the centroid into NW / NE / SW / SE quadrants; the `§5 driver` cell iterates all four to cover the whole province without ever holding everything in RAM at once.
-2. **SR** · `opensr_model.SRLatentDiffusion` 4× super-resolves 10 m → 2.5 m on the 4-band RGB-NIR composite, 128-LR → 512-SR tiles with 32-px overlap. Per-quadrant cache lives at `data/_cache/s2_sr/rayong_<quadrant>/sr_YYYYMM.tif`; cached tifs are reused as-is so re-runs are near-instant. A standalone `notebooks/regen_quadrant.ipynb` rebuilds a single quadrant's S2 + SR when one cache is dirty (duplicate / truncated / wrong bbox).
-3. **GenAI** · Latent-space LoRA adapters (rank 32, α 64) fine-tune the opensr-ldsrs2 UNet per minority class on real SR patches. Training runs in the model's native latent space (VAE encode → DDPM noise → predict ε), so synthetic outputs are 4-band Sentinel-2 reflectance, not RGB. Seven minority classes (Mango / Rambutan / Langsat / Longan / Mangosteen / Coconut / Jackfruit) — windows pooled across all 4 quadrants up to `samples_per_minor = 600` per class, mask-weighted MSE focuses the adapter on class pixels. Sampler: DDIM `η = 0.1`, 200 steps. Inline RGB + NDVI snapshots every 10 epochs let you eyeball convergence. Per-class adapter ≈ 10 MB; 200 synthetic patches per class are appended to the pixel table for §RF and cached to `data/_cache/synth_rows.pkl` so a kernel restart can skip §6.
-4. **Feat** · LDD landuse shapefile rasterised onto the SR grid; per-pixel features are the slim 12-column SR-only set (4 bands × {mean, std}, NDVI mean / amp, NDWI mean, EVI mean). Per-class pixel cap (default 100 000 per AOI) keeps dominant classes (Para rubber, Oil palm) from swamping the table. Output cached at `data/_out/pixel_table_full.parquet` so the RF step can lazy-reload after a kernel restart.
-5. **RF** · `sklearn.RandomForestClassifier` stage-1 on the full table + a minority-focused stage-2 cascade. Cell auto-reloads cached `DF` and `synth_rows` from disk when not in globals and splices synth rows into `DF` before fitting. Stage-2 catches samples flagged as minority.
-
-§10 of the notebook exports `public/class-stats.json` (per-quadrant + per-S2-tile class shares + imbalance metrics) via the `notebooks/export_class_stats.py` standalone (preset `rayong-crops-15` mapping LU_DES_EN → 15-class taxonomy including a unified water class). Commit the JSON to refresh the ClassInsights panel on the live site.
-
----
-
-## Local development
+### Web app development
 
 ```bash
-cp .env.local.example .env.local        # fill in your Supabase keys
+cp .env.local.example .env.local        # fill in Supabase keys
 npm install
 npm run dev                             # http://localhost:3000
 ```
 
-Required env vars:
-
-| Variable                         | Source                                                          |
-| -------------------------------- | --------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`       | Supabase · Project Settings → API → Project URL                 |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Supabase · Project Settings → API → anon public key             |
-
-Without these, the app degrades to localStorage-only mode — useful for previewing the UI without a backend.
-
-Notebook env:
-
-```bash
-cd notebooks
-conda env create -f environment.yml
-conda activate synthcrop
-python -m ipykernel install --user --name synthcrop --display-name "Python (synthcrop)"
-```
-
-Pinned: Python 3.12 (opensr-model requirement), `numpy<2`, `torch==2.3.1+cu121`, `transformers<4.47` (matches the torch 2.3 envelope).
+Required environment variables: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Without these, the app falls back to localStorage-only mode for UI previews.
 
 ---
 
 ## License
 
-Internal research project. Attribution required for upstream data + imagery:
+Internal research project. Attribution required for upstream data and imagery:
 
 - Sentinel-2 imagery © European Union, Copernicus Sentinel data.
 - Esri World Imagery — © Esri, Maxar, Earthstar Geographics, USDA, USGS, AeroGRID, IGN, and the GIS user community.
